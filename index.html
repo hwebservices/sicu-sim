@@ -11,6 +11,7 @@
     Patient monitor: EDIIIC (assets/patient-monitor.glb)
     IV pump: EDIIIC (assets/iv-pump.glb)
     Adult male patient base mesh: Dessen (assets/patient-male.glb)
+    Medical ventilator: lazarys (assets/ventilator.glb)
 
     Visual references studied: Sun Coast Hospital SICU patient room
     (masonblau.com/project/sun-coast-hospital/), HSC Surgical ICU
@@ -273,9 +274,10 @@
 
     async function buildRoom() {
       const loader = new GLTFLoader();
-      const [bedAsset, patientAsset, monitorAsset, pumpAsset] = await Promise.all([
+      const [bedAsset, patientAsset, monitorAsset, pumpAsset, ventilatorAsset] = await Promise.all([
         loadGLB('assets/icu-bed.glb'), loadGLB('assets/patient-male.glb'),
-        loadGLB('assets/patient-monitor.glb'), loadGLB('assets/iv-pump.glb')
+        loadGLB('assets/patient-monitor.glb'), loadGLB('assets/iv-pump.glb'),
+        loadGLB('assets/ventilator.glb')
       ]);
       // Clinical bed: the provided shaped model is rotated into the room's bed axis and toned beige/gray.
       const bed = bedAsset; nameModel(bed, 'bed'); retint(bed, '#d3d2cb', .55);
@@ -412,15 +414,20 @@
       }
       ivPole(-2.05, -4.05, 1); ivPole(-2.35, -2.65, 2); ivPole(-2.12, -1.25, 3);
 
-      // Ventilator model is intentionally pending; the named location contains no substitute equipment.
-      const ventilator = new THREE.Group(); ventilator.name = 'ventilator'; ventilator.position.set(3.65, .025, -2.1); scene.add(ventilator); sceneObjects.ventilator = ventilator;
-      const footprint = cylinder(ventilator, 'ventilator staged location marker', 0, .015, 0, .52, .52, .03, M.accent, 48);
-      footprint.material = new THREE.MeshStandardMaterial({ color: '#ddd8ca', roughness: .75, transparent: true, opacity: .75 });
-      label('VENTILATOR · MODEL PENDING', [3.65, 1.1, -2.1], { pending: true }); ventilator.userData.staged = true;
-      // Disconnected corrugated breathing circuit remains coiled beside the staged location.
+      // Real medical ventilator model (lazarys, CC BY 4.0), with a separate circuit resting loose beside it.
+      const ventilator = new THREE.Group(); ventilator.name = 'ventilator'; ventilator.position.set(3.65, 0, -2.1); scene.add(ventilator); sceneObjects.ventilator = ventilator;
+      const ventilatorModel = ventilatorAsset; nameModel(ventilatorModel, 'medical ventilator model');
+      centerAndScale(ventilatorModel, 1.82, { rotateX: -Math.PI / 2 });
+      const ventilatorFloorOffset = ventilatorModel.position.y;
+      ventilatorModel.position.set(0, ventilatorFloorOffset, 0);
+      ventilator.add(ventilatorModel);
+      label('VENTILATOR', [3.65, 2.08, -2.1]);
+      // Visible corrugated tubing is coiled on the floor and has free ends; it does not reach the patient.
       const coilPoints = [];
-      for (let i = 0; i <= 120; i++) { const t = i / 120 * Math.PI * 3.2; coilPoints.push([.7 + .25 * Math.cos(t), .09 + .055 * Math.sin(t * 2), .28 * Math.sin(t)]); }
-      tube(ventilator, 'disconnected ventilator circuit coil', coilPoints, .035, M.rubber, 180);
+      for (let i = 0; i <= 120; i++) { const t = i / 120 * Math.PI * 3.2; coilPoints.push([.67 + .24 * Math.cos(t), .07 + .025 * Math.sin(t * 2), .34 + .24 * Math.sin(t)]); }
+      tube(ventilator, 'disconnected ventilator circuit coil', coilPoints, .034, M.rubber, 180);
+      tube(ventilator, 'free ventilator circuit end one', [[.45,.07,.34],[.27,.055,.32],[.14,.06,.32]], .034, M.rubber, 24);
+      tube(ventilator, 'free ventilator circuit end two', [[.88,.07,.34],[1.03,.055,.43],[1.15,.06,.46]], .034, M.rubber, 24);
 
       // Crash/medication cart as a supporting prop; restrained dimensional details.
       const crashCart = new THREE.Group(); crashCart.name = 'crashCart'; crashCart.position.set(4.55, 0, .8); scene.add(crashCart); sceneObjects.crashCart = crashCart;
