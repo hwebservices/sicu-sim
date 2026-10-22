@@ -1,0 +1,476 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#e7e8e3">
+  <title>SICU · Room 04</title>
+  <!--
+    Model credits — CC BY 4.0:
+    ICU bed: yvopors14 (assets/icu-bed.glb)
+    Patient monitor: EDIIIC (assets/patient-monitor.glb)
+    IV pump: EDIIIC (assets/iv-pump.glb)
+    Adult male patient base mesh: Dessen (assets/patient-male.glb)
+
+    Visual references studied: Sun Coast Hospital SICU patient room
+    (masonblau.com/project/sun-coast-hospital/), HSC Surgical ICU
+    (hsc.mb.ca/.../surgical-icu/), and Ohio State SICU
+    (health.osu.edu/.../inside-the-surgical-intensive-care-unit).
+  -->
+  <style>
+    :root { color-scheme: light; font-family: Inter, "Helvetica Neue", Arial, sans-serif; }
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #e8e9e5; color: #283337; }
+    #viewport { position: fixed; inset: 0; }
+    canvas { display: block; width: 100%; height: 100%; }
+    .header {
+      position: fixed; z-index: 2; inset: 0 0 auto; height: 76px; padding: 0 32px;
+      display: flex; align-items: center; justify-content: space-between;
+      background: linear-gradient(180deg, rgba(249,250,247,.98), rgba(249,250,247,.87));
+      border-bottom: 1px solid rgba(56,68,70,.13); box-shadow: 0 4px 18px rgba(39,50,50,.05);
+    }
+    .identity { display: flex; align-items: center; gap: 13px; }
+    .mark { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 9px; color: #fff; background: #315c74; font-size: 18px; font-weight: 700; box-shadow: 0 3px 9px #315c7430; }
+    .kicker, .room-id, .status, .hint { font: 600 10px/1.3 "SFMono-Regular", Consolas, monospace; letter-spacing: .13em; text-transform: uppercase; color: #788286; }
+    .identity strong { display: block; margin-top: 3px; font-size: 14px; font-weight: 650; letter-spacing: -.01em; color: #344149; }
+    .right { display: flex; align-items: center; gap: 22px; }
+    .status { padding: 8px 11px; border: 1px solid #d1d9d5; border-radius: 18px; color: #68767b; background: #f5f7f4; letter-spacing: .08em; }
+    .status i { display: inline-block; width: 6px; height: 6px; margin-right: 7px; border-radius: 50%; background: #8b9ba0; vertical-align: 1px; }
+    .footer { position: fixed; z-index: 2; left: 32px; bottom: 26px; pointer-events: none; }
+    .footer .kicker { color: #6b777b; }
+    .footer h1 { margin: 7px 0 0; color: #344248; font-size: 24px; line-height: 1; font-weight: 650; letter-spacing: -.045em; }
+    .footer p { margin: 8px 0 0; color: #6c777b; font-size: 12px; }
+    .hint { position: fixed; z-index: 2; right: 26px; bottom: 25px; display: flex; gap: 15px; align-items: center; padding: 10px 12px; border: 1px solid #cbd2cf; border-radius: 6px; background: rgba(247,248,245,.84); color: #6c777b; font-size: 9px; letter-spacing: .07em; backdrop-filter: blur(8px); }
+    .hint span { display: flex; align-items: center; gap: 6px; }
+    .hint b { display: grid; place-items: center; width: 18px; height: 18px; border: 1px solid #c5ceca; border-radius: 4px; color: #50636b; font: 500 10px Arial,sans-serif; }
+    #loading { position: fixed; inset: 76px 0 0; display: grid; place-items: center; z-index: 1; color: #647176; font: 11px "SFMono-Regular", Consolas, monospace; letter-spacing: .15em; text-transform: uppercase; pointer-events: none; }
+    #loading[hidden] { display: none; }
+    @media (max-width: 680px) {
+      .header { height: 64px; padding: 0 16px; }
+      .right { gap: 8px; } .room-id { display: none; }
+      .footer { left: 17px; bottom: 18px; } .footer h1 { font-size: 19px; }
+      .footer p { max-width: 210px; font-size: 11px; line-height: 1.45; }
+      .hint { right: 12px; bottom: 16px; gap: 8px; padding: 8px; }
+      .hint span { font-size: 0; } .hint b { font-size: 9px; }
+      .identity strong { font-size: 12px; }
+    }
+  </style>
+  <script type="importmap">
+    {"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"}}
+  </script>
+</head>
+<body>
+  <div id="viewport" aria-label="Three-dimensional surgical intensive care room"></div>
+  <header class="header">
+    <div class="identity"><div class="mark">+</div><div><div class="kicker">Surgical intensive care</div><strong>Clinical environment</strong></div></div>
+    <div class="right"><span class="room-id">UNIT 04 &nbsp; / &nbsp; SICU</span><span class="status"><i></i>STATIC SCENE</span></div>
+  </header>
+  <div id="loading">Preparing room</div>
+  <div class="footer"><div class="kicker">Room 04 · Orientation view</div><h1>Surgical ICU</h1><p>Static visual environment · No patient monitoring or treatment logic</p></div>
+  <div class="hint"><span><b>↔</b> ROTATE</span><span><b>⌕</b> ZOOM</span><span><b>⇧</b> PAN</span></div>
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/OrbitControls.js';
+    import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/GLTFLoader.js';
+
+    const host = document.querySelector('#viewport');
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color('#e8e9e5');
+    const camera = new THREE.PerspectiveCamera(37, innerWidth / innerHeight, 0.1, 80);
+    camera.position.set(8.9, 6.6, 9.8);
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.06;
+    host.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.target.set(0, 1.28, -0.45);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.075;
+    controls.enableRotate = true;
+    controls.enableZoom = true;
+    controls.enablePan = true;
+    controls.minDistance = 7.2;
+    controls.maxDistance = 18;
+    controls.minPolarAngle = 0.25;
+    controls.maxPolarAngle = Math.PI * 0.49;
+    controls.minAzimuthAngle = -Math.PI * 0.43;
+    controls.maxAzimuthAngle = Math.PI * 0.43;
+
+    const hemi = new THREE.HemisphereLight('#fffdf8', '#9da5a5', 2.05);
+    scene.add(hemi);
+    const key = new THREE.DirectionalLight('#fff3df', 2.7);
+    key.position.set(-4.5, 10.5, 5.5);
+    key.castShadow = true;
+    key.shadow.mapSize.set(2048, 2048);
+    key.shadow.camera.left = -9; key.shadow.camera.right = 9;
+    key.shadow.camera.top = 9; key.shadow.camera.bottom = -9;
+    key.shadow.bias = -0.00015;
+    scene.add(key);
+    const fill = new THREE.DirectionalLight('#dce8ee', 1.05);
+    fill.position.set(7, 5, -2);
+    scene.add(fill);
+    const ambientBounce = new THREE.PointLight('#f4ead8', 34, 8, 1.8);
+    ambientBounce.position.set(-1.6, 4.2, -3.5);
+    scene.add(ambientBounce);
+
+    const M = {
+      floor: new THREE.MeshStandardMaterial({ color: '#c4c7c2', roughness: .84 }),
+      wall: new THREE.MeshStandardMaterial({ color: '#ecece7', roughness: .93 }),
+      accent: new THREE.MeshStandardMaterial({ color: '#d9dfdc', roughness: .78 }),
+      headwall: new THREE.MeshStandardMaterial({ color: '#d8dbd7', roughness: .58, metalness: .12 }),
+      porcelain: new THREE.MeshStandardMaterial({ color: '#f4f4ef', roughness: .42 }),
+      steel: new THREE.MeshStandardMaterial({ color: '#879295', metalness: .66, roughness: .29 }),
+      blue: new THREE.MeshStandardMaterial({ color: '#52758a', roughness: .48 }),
+      blueLight: new THREE.MeshStandardMaterial({ color: '#96afba', roughness: .58 }),
+      ink: new THREE.MeshStandardMaterial({ color: '#34434a', roughness: .44 }),
+      linen: new THREE.MeshStandardMaterial({ color: '#f0eee7', roughness: .96 }),
+      gown: new THREE.MeshStandardMaterial({ color: '#849eab', roughness: .9 }),
+      skin: new THREE.MeshStandardMaterial({ color: '#bc927b', roughness: .9 }),
+      rubber: new THREE.MeshStandardMaterial({ color: '#727d7e', roughness: .73 }),
+      screen: new THREE.MeshStandardMaterial({ color: '#132127', roughness: .23, metalness: .18 }),
+      amber: new THREE.MeshStandardMaterial({ color: '#d9bd79', roughness: .53 }),
+      clear: new THREE.MeshStandardMaterial({ color: '#dce7e5', transparent: true, opacity: .68, roughness: .15 }),
+      red: new THREE.MeshStandardMaterial({ color: '#ab5c55', roughness: .5 }),
+      green: new THREE.MeshStandardMaterial({ color: '#78977f', roughness: .58 })
+    };
+    const sceneObjects = {};
+    function box(parent, name, x, y, z, sx, sy, sz, material, options = {}) {
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), material);
+      mesh.name = name; mesh.position.set(x, y, z);
+      if (options.rotation) mesh.rotation.set(...options.rotation);
+      mesh.castShadow = options.cast !== false; mesh.receiveShadow = true;
+      parent.add(mesh); return mesh;
+    }
+    function cylinder(parent, name, x, y, z, rt, rb, h, material, segments = 28) {
+      const mesh = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, segments), material);
+      mesh.name = name; mesh.position.set(x, y, z); mesh.castShadow = true; mesh.receiveShadow = true;
+      parent.add(mesh); return mesh;
+    }
+    function sphere(parent, name, x, y, z, sx, sy, sz, material) {
+      const mesh = new THREE.Mesh(new THREE.SphereGeometry(1, 28, 18), material);
+      mesh.name = name; mesh.position.set(x, y, z); mesh.scale.set(sx, sy, sz); mesh.castShadow = true;
+      parent.add(mesh); return mesh;
+    }
+    function tube(parent, name, points, radius, material, tubular = 80) {
+      const curve = new THREE.CatmullRomCurve3(points.map(p => new THREE.Vector3(...p)));
+      const mesh = new THREE.Mesh(new THREE.TubeGeometry(curve, tubular, radius, 10, false), material);
+      mesh.name = name; mesh.castShadow = true; parent.add(mesh); return mesh;
+    }
+    function label(text, position, options = {}) {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      ctx.font = '600 23px Arial';
+      const width = Math.ceil(ctx.measureText(text).width) + 32;
+      canvas.width = width; canvas.height = 48;
+      ctx.font = '600 23px Arial'; ctx.fillStyle = options.pending ? 'rgba(246,242,229,.97)' : 'rgba(247,248,244,.97)';
+      ctx.beginPath(); ctx.roundRect(1, 1, width - 2, 46, 8); ctx.fill();
+      ctx.strokeStyle = options.pending ? 'rgba(160,128,70,.5)' : 'rgba(68,88,93,.3)'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.roundRect(1, 1, width - 2, 46, 8); ctx.stroke();
+      ctx.fillStyle = options.pending ? '#705f3f' : '#3f5963'; ctx.fillText(text, 16, 31);
+      const texture = new THREE.CanvasTexture(canvas); texture.colorSpace = THREE.SRGBColorSpace;
+      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false }));
+      sprite.position.set(...position); sprite.scale.set(width / 135, .34, 1); scene.add(sprite); return sprite;
+    }
+    function nameModel(root, name) { root.name = name; root.traverse(o => { if (o !== root && !o.name) o.name = `${name} component`; }); }
+    function centerAndScale(root, height, { rotateX = 0, rotateY = 0, hideCurtain = false } = {}) {
+      root.updateMatrixWorld(true);
+      if (hideCurtain) root.traverse(o => { if (/CurtainSetup/i.test(o.name)) o.visible = false; });
+      root.rotation.set(rotateX, rotateY, 0);
+      root.updateMatrixWorld(true);
+      let bounds = new THREE.Box3().setFromObject(root);
+      const size = bounds.getSize(new THREE.Vector3());
+      root.scale.setScalar(height / size.y);
+      root.updateMatrixWorld(true);
+      bounds = new THREE.Box3().setFromObject(root);
+      const center = bounds.getCenter(new THREE.Vector3());
+      root.position.x -= center.x; root.position.z -= center.z; root.position.y -= bounds.min.y;
+      root.updateMatrixWorld(true);
+      return new THREE.Box3().setFromObject(root);
+    }
+    function retint(root, color, roughness = .62) {
+      root.traverse(o => {
+        if (!o.isMesh) return;
+        const old = o.material;
+        if (Array.isArray(old)) {
+          o.material = old.map((mat, i) => new THREE.MeshStandardMaterial({
+            color: i % 4 === 0 ? color : '#d9ddda', roughness, metalness: .16,
+            map: mat.map || null, normalMap: mat.normalMap || null
+          }));
+        } else {
+          o.material = new THREE.MeshStandardMaterial({
+            color, roughness, metalness: .16,
+            map: old?.map || null, normalMap: old?.normalMap || null
+          });
+        }
+        o.castShadow = true; o.receiveShadow = true;
+      });
+    }
+    function loadGLB(path) {
+      return new Promise((resolve, reject) => new GLTFLoader().load(path, result => resolve(result.scene), undefined, reject));
+    }
+
+    // Room shell: two walls and an open clinical working side for the orientation view.
+    box(scene, 'vinyl floor', 0, -.14, 0, 13.2, .28, 11.3, M.floor);
+    box(scene, 'rear wall', 0, 3.15, -5.62, 13.2, 6.3, .22, M.wall, { cast: false });
+    box(scene, 'left wall', -6.62, 3.15, 0, .22, 6.3, 11.3, M.wall, { cast: false });
+    box(scene, 'wall bumper', 0, 1.05, -5.46, 12.9, .19, .08, M.accent, { cast: false });
+    box(scene, 'left wall bumper', -6.46, 1.05, 0, .08, .19, 11.0, M.accent, { cast: false });
+    for (let x = -6; x <= 6; x += 1) box(scene, 'subtle floor seam', x, .005, 0, .009, .008, 10.9, new THREE.MeshStandardMaterial({ color: '#b9bdb9', roughness: 1 }), { cast: false });
+
+    // Headwall services directly behind the bed, inspired by modern ICU service columns.
+    const hw = new THREE.Group(); hw.name = 'headwall'; hw.position.set(0, 0, -5.43); scene.add(hw); sceneObjects.headwall = hw;
+    box(hw, 'headwall backing', 0, 2.58, 0, 4.6, 1.7, .17, M.headwall);
+    box(hw, 'headwall upper rail', 0, 3.48, .06, 4.85, .12, .12, M.steel);
+    box(hw, 'headwall lower rail', 0, 1.73, .06, 4.85, .08, .12, M.steel);
+    box(hw, 'headwall service column', 0, 2.55, .16, 1.28, 1.5, .15, M.blueLight);
+    const outlet = (name, x, y, color, labelText) => {
+      cylinder(hw, `${name} socket ring`, x, y, .255, .10, .10, .035, M.steel, 32).rotation.x = Math.PI / 2;
+      cylinder(hw, `${name} port`, x, y, .28, .062, .062, .04, color, 28).rotation.x = Math.PI / 2;
+      box(hw, `${name} label`, x, y - .12, .26, .34, .055, .018, M.porcelain, { cast: false });
+      const text = document.createElement('canvas'); text.width = 256; text.height = 64;
+      const c = text.getContext('2d'); c.fillStyle = '#46565d'; c.font = '600 34px Arial'; c.textAlign = 'center'; c.fillText(labelText, 128, 45);
+      const tex = new THREE.CanvasTexture(text); tex.colorSpace = THREE.SRGBColorSpace;
+      const sign = new THREE.Mesh(new THREE.PlaneGeometry(.31, .078), new THREE.MeshBasicMaterial({ map: tex, transparent: true }));
+      sign.position.set(x, y - .12, .273); hw.add(sign);
+    };
+    outlet('oxygen outlet', -.39, 2.92, M.green, 'O₂');
+    outlet('medical air outlet', -.39, 2.42, M.blue, 'AIR');
+    outlet('vacuum outlet', -.39, 1.92, M.amber, 'VAC');
+    for (const y of [2.96, 2.55, 2.14]) {
+      box(hw, 'electrical duplex plate', .16, y, .27, .27, .29, .035, M.porcelain);
+      for (const dx of [-.065, .065]) {
+        cylinder(hw, 'electrical receptacle', .16 + dx, y, .294, .018, .018, .012, M.ink, 12).rotation.x = Math.PI / 2;
+      }
+    }
+    box(hw, 'nurse call plate', .65, 2.67, .26, .32, .5, .06, M.porcelain);
+    sphere(hw, 'nurse call button', .65, 2.75, .31, .075, .075, .035, M.red);
+    box(hw, 'nurse call label bar', .65, 2.55, .30, .18, .025, .018, M.blue);
+    box(hw, 'headwall reading light housing', 1.63, 3.26, .25, 1.15, .09, .28, M.porcelain);
+    box(hw, 'headwall reading light lens', 1.63, 3.205, .32, 1.0, .025, .15, new THREE.MeshBasicMaterial({ color: '#fff4d9' }), { cast: false });
+    const light = new THREE.RectAreaLight('#fff0d1', 2.6, 1.3, .35); light.position.set(1.63, 3.1, .45); light.rotation.x = -Math.PI / 2; scene.add(light);
+    // Wall-mounted handrail and care board with a modest analog clock.
+    cylinder(scene, 'patient handrail', -2.9, 1.38, -5.38, .045, .045, 3.2, M.blueLight, 20).rotation.z = Math.PI / 2;
+    for (const x of [-4.2, -1.6]) box(scene, 'handrail bracket', x, 1.27, -5.38, .08, .25, .09, M.steel);
+    box(scene, 'whiteboard frame', -4.62, 3.15, -5.43, 2.5, 1.25, .12, M.steel);
+    box(scene, 'whiteboard surface', -4.62, 3.15, -5.35, 2.35, 1.1, .035, M.porcelain, { cast: false });
+    for (const [x, y, w] of [[-5.35,3.47,.83],[-5.35,3.2,1.5],[-5.35,2.93,1.19],[-3.95,3.47,.64]]) box(scene, 'whiteboard marker line', x + w / 2, y, -5.325, w, .018, .009, M.blueLight, { cast: false });
+    cylinder(scene, 'clock rim', 4.95, 4.42, -5.42, .37, .37, .06, M.steel, 48).rotation.x = Math.PI / 2;
+    cylinder(scene, 'clock face', 4.95, 4.42, -5.375, .31, .31, .025, M.porcelain, 48).rotation.x = Math.PI / 2;
+    box(scene, 'clock minute hand', 4.95, 4.51, -5.35, .025, .19, .012, M.ink, { cast: false });
+    box(scene, 'clock hour hand', 5.02, 4.42, -5.35, .15, .025, .012, M.ink, { rotation: [0, 0, .6], cast: false });
+    // Hand sanitizer and gloves are within easy reach, mounted at the work zone.
+    box(scene, 'hand sanitizer dispenser', -5.82, 2.18, -5.31, .39, .57, .23, M.porcelain);
+    box(scene, 'sanitizer window', -5.82, 2.24, -5.18, .23, .23, .025, M.blueLight, { cast: false });
+    box(scene, 'sanitizer pump', -5.82, 1.88, -5.12, .16, .07, .12, M.steel);
+    box(scene, 'gloves dispenser', -3.3, 2.7, -5.32, .61, .55, .24, M.porcelain);
+    box(scene, 'glove dispenser opening', -3.3, 2.46, -5.18, .29, .08, .025, M.blueLight, { cast: false });
+
+    async function buildRoom() {
+      const loader = new GLTFLoader();
+      const [bedAsset, patientAsset, monitorAsset, pumpAsset] = await Promise.all([
+        loadGLB('assets/icu-bed.glb'), loadGLB('assets/patient-male.glb'),
+        loadGLB('assets/patient-monitor.glb'), loadGLB('assets/iv-pump.glb')
+      ]);
+      // Clinical bed: the provided shaped model is rotated into the room's bed axis and toned beige/gray.
+      const bed = bedAsset; nameModel(bed, 'bed'); retint(bed, '#d3d2cb', .55);
+      // With the bed model's long axis along source Y, the post-rotation Y extent
+      // is its real frame height. A 1.3 m target therefore preserves its ~3.2 m length.
+      centerAndScale(bed, 1.3, { rotateX: -Math.PI / 2 });
+      const bedFloorOffset = bed.position.y;
+      bed.position.set(0, bedFloorOffset, -3.1); scene.add(bed); sceneObjects.bed = bed; // head end beneath the wall service column
+      const bedBounds = new THREE.Box3().setFromObject(bed);
+      const mattressTop = bedBounds.max.y - .24;
+      // A fitted sheet surface follows a 30° raised head section over the real bed.
+      const sheetRows = [
+        [-4.63, mattressTop + .43], [-4.47, mattressTop + .34],
+        [-4.29, mattressTop + .23], [-4.11, mattressTop + .12],
+        [-3.91, mattressTop + .02], [-1.63, mattressTop + .02]
+      ];
+      const sheetVertices = [], sheetIndices = [];
+      for (let row = 0; row < sheetRows.length; row++) {
+        const [z, y] = sheetRows[row];
+        for (const x of [-.63, 0, .63]) sheetVertices.push(x, y, z);
+        if (row < sheetRows.length - 1) {
+          const a = row * 3, b = a + 3;
+          sheetIndices.push(a,b,a+1, a+1,b,b+1, a+1,b+1,a+2, a+2,b+1,b+2);
+        }
+      }
+      const sheetGeometry = new THREE.BufferGeometry();
+      sheetGeometry.setAttribute('position', new THREE.Float32BufferAttribute(sheetVertices, 3));
+      sheetGeometry.setIndex(sheetIndices); sheetGeometry.computeVertexNormals();
+      const fittedSheet = new THREE.Mesh(sheetGeometry, new THREE.MeshStandardMaterial({ color: '#f0eee7', roughness: .96, side: THREE.DoubleSide }));
+      fittedSheet.name = 'fitted sheet over elevated head deck'; fittedSheet.receiveShadow = true; scene.add(fittedSheet);
+      sphere(scene, 'pillow', 0, mattressTop + .41, -4.3, .37, .13, .25, new THREE.MeshStandardMaterial({ color: '#faf8f1', roughness: .98 }));
+      // A light sheet drapes over the lower legs without concealing the patient silhouette.
+      box(scene, 'sheet over lower body', 0, mattressTop + .36, -2.05, 1.19, .045, 1.38, M.linen, { cast: false });
+
+      // Mannequin base mesh posed supine and covered in a custom cloth gown.
+      const patient = new THREE.Group(); patient.name = 'patient'; patient.position.set(0, mattressTop + .19, -3.1); scene.add(patient); sceneObjects.patient = patient;
+      const body = patientAsset; nameModel(body, 'patient base mesh');
+      body.traverse(o => { if (o.isMesh) { o.material = M.skin; o.castShadow = true; } });
+      centerAndScale(body, 1.73);
+      body.rotation.x = -Math.PI / 2;
+      body.position.set(0, .19, .865);
+      patient.add(body);
+      // Shaped cloth torso shell and short sleeves around the model's shoulders.
+      const gownGroup = new THREE.Group(); gownGroup.name = 'gown';
+      const sections = [
+        { y: .54, rx: .29, rz: .18 }, { y: .70, rx: .39, rz: .23 },
+        { y: .92, rx: .43, rz: .23 }, { y: 1.18, rx: .39, rz: .22 },
+        { y: 1.38, rx: .31, rz: .18 }
+      ];
+      const verts = [], uvs = [], ids = [], around = 28;
+      sections.forEach((row, j) => {
+        for (let i = 0; i <= around; i++) {
+          const a = i / around * Math.PI * 2;
+          verts.push(Math.cos(a) * row.rx, row.y, Math.sin(a) * row.rz);
+          uvs.push(i / around, j / (sections.length - 1));
+          if (j < sections.length - 1 && i < around) {
+            const p = j * (around + 1) + i, q = p + around + 1;
+            ids.push(p, q, p + 1, p + 1, q, q + 1);
+          }
+        }
+      });
+      const gownGeo = new THREE.BufferGeometry(); gownGeo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3)); gownGeo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2)); gownGeo.setIndex(ids); gownGeo.computeVertexNormals();
+      const gownShell = new THREE.Mesh(gownGeo, new THREE.MeshStandardMaterial({ color: '#829aa7', roughness: .95, side: THREE.DoubleSide }));
+      gownShell.name = 'gown torso'; gownShell.castShadow = true; gownGroup.add(gownShell);
+      sphere(gownGroup, 'gown left sleeve', -.39, 1.28, 0, .26, .13, .14, M.gown);
+      sphere(gownGroup, 'gown right sleeve', .39, 1.28, 0, .26, .13, .14, M.gown);
+      tube(gownGroup, 'gown waist seam', [[-.28,.72,.15],[-.15,.71,.23],[0,.70,.24],[.16,.71,.23],[.28,.72,.15]], .012, M.blue);
+      gownGroup.rotation.x = -Math.PI / 2; gownGroup.position.set(0, .03, .865); patient.add(gownGroup);
+      // Arms rest on top of sheet; no wounds or connected lines.
+
+      // Bedside cabinet, molded details and an unlabeled patient table.
+      const bedsideTable = new THREE.Group(); bedsideTable.name = 'bedsideTable'; bedsideTable.position.set(-2.35, 0, -3.15); scene.add(bedsideTable); sceneObjects.bedsideTable = bedsideTable;
+      box(bedsideTable, 'cabinet body', 0, .64, 0, .68, 1.18, .68, M.porcelain);
+      box(bedsideTable, 'cabinet top', 0, 1.26, 0, .8, .12, .78, M.blueLight);
+      for (const y of [.98, .65, .32]) { box(bedsideTable, 'cabinet drawer', 0, y, .35, .55, .24, .035, M.accent); box(bedsideTable, 'drawer pull', 0, y, .38, .2, .025, .025, M.steel); }
+      cylinder(bedsideTable, 'cabinet caster', -.26, .11, -.26, .07, .07, .1, M.ink);
+      cylinder(bedsideTable, 'cabinet caster', .26, .11, .26, .07, .07, .1, M.ink);
+      // Adjustable overbed table with a thin rounded top and offset stem.
+      const overbedTable = new THREE.Group(); overbedTable.name = 'overbedTable'; overbedTable.position.set(-2.0, 0, -1.55); scene.add(overbedTable); sceneObjects.overbedTable = overbedTable;
+      cylinder(overbedTable, 'overbed table foot', 0, .11, 0, .37, .37, .12, M.steel);
+      cylinder(overbedTable, 'overbed table caster hub', 0, .08, 0, .17, .17, .08, M.ink);
+      cylinder(overbedTable, 'overbed table post', 0, .77, 0, .065, .065, 1.28, M.steel);
+      box(overbedTable, 'overbed table top', .34, 1.51, 0, 1.28, .075, .68, M.blueLight);
+
+      // Monitor on its real rolling stand model; hide the asset's separate privacy curtain.
+      const monitor = monitorAsset; nameModel(monitor, 'monitor');
+      centerAndScale(monitor, 1.78, { hideCurtain: true });
+      retint(monitor, '#d5d7d3', .47);
+      monitor.position.set(2.45, 0, -3.18); scene.add(monitor); sceneObjects.monitor = monitor;
+      const monitorBounds = new THREE.Box3().setFromObject(monitor);
+      const center = monitorBounds.getCenter(new THREE.Vector3());
+      // Static placeholder screen image is aligned to the display face on the source model.
+      const screenCanvas = document.createElement('canvas'); screenCanvas.width = 640; screenCanvas.height = 360;
+      const ctx = screenCanvas.getContext('2d');
+      ctx.fillStyle = '#102126'; ctx.fillRect(0, 0, 640, 360);
+      ctx.strokeStyle = '#293d3d'; ctx.lineWidth = 1;
+      for (let x = 0; x < 640; x += 40) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, 360); ctx.stroke(); }
+      for (let y = 0; y < 360; y += 40) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(640, y); ctx.stroke(); }
+      ctx.fillStyle = '#92c9a8'; ctx.font = '600 74px monospace'; ctx.fillText('78', 25, 90);
+      ctx.fillStyle = '#9bb0aa'; ctx.font = '20px monospace'; ctx.fillText('HR bpm', 30, 118);
+      ctx.fillStyle = '#8bc7b5'; ctx.font = '50px monospace'; ctx.fillText('97', 26, 192);
+      ctx.fillStyle = '#9bb0aa'; ctx.font = '19px monospace'; ctx.fillText('SpO2 %', 30, 218);
+      ctx.fillStyle = '#a9c8ba'; ctx.font = '38px monospace'; ctx.fillText('122/76', 352, 86);
+      ctx.fillStyle = '#9bb0aa'; ctx.font = '18px monospace'; ctx.fillText('NIBP mmHg', 358, 110);
+      ctx.strokeStyle = '#6bd3ae'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(20, 286);
+      for (let i = 0; i < 28; i++) ctx.lineTo(20 + i * 22, 286 + ([4, 5, 12, 13, 20, 21].includes(i % 28) ? (i % 2 ? 20 : -48) : 0)); ctx.stroke();
+      const screenTexture = new THREE.CanvasTexture(screenCanvas); screenTexture.colorSpace = THREE.SRGBColorSpace;
+      const display = new THREE.Mesh(new THREE.PlaneGeometry(.46, .27), new THREE.MeshBasicMaterial({ map: screenTexture }));
+      display.name = 'static placeholder vitals display'; display.position.set(0, center.y + .42, monitorBounds.max.z - monitor.position.z + .012); monitor.add(display);
+      label('STATIC PLACEHOLDER VITALS', [2.45, 2.1, -3.05]);
+
+      // Three real infusion pump models, each carried by its own wheeled pole.
+      function ivPole(x, z, n) {
+        const pole = new THREE.Group(); pole.name = `ivPole${n}`; pole.position.set(x, 0, z); scene.add(pole); sceneObjects[`ivPole${n}`] = pole;
+        cylinder(pole, 'pole mast', 0, 1.28, 0, .032, .042, 2.55, M.steel, 20);
+        for (const [dx, dz] of [[.34,0],[-.17,.3],[-.17,-.3]]) tube(pole, 'IV pole base leg', [[0,.19,0],[dx*.66,.12,dz*.66],[dx,.12,dz]], .025, M.steel, 16);
+        for (const [dx, dz] of [[.34,0],[-.17,.3],[-.17,-.3]]) { const wheel = cylinder(pole, 'IV pole caster', dx, .07, dz, .06, .06, .09, M.ink, 18); wheel.rotation.z = Math.PI / 2; }
+        const pump = pumpAsset.clone(true); nameModel(pump, `ivPump${n}`);
+        pump.traverse(o => {
+          if (o.name === 'Pill_Packet_lambert1_0') o.visible = false;
+          if (o.name === 'Blood_Vial_lambert1_0') o.visible = false;
+          if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; }
+        });
+        centerAndScale(pump, .38);
+        pump.position.set(.1, 1.28, .06); pole.add(pump); sceneObjects[`ivPump${n}`] = pump;
+        box(pole, 'pump display glass', .1, 1.37, .23, .19, .09, .02, M.screen, { cast: false });
+        // Short unattached line terminates below the pole head, far from the mannequin.
+        tube(pole, 'disconnected IV line', [[.14,1.06,.07],[.2,.84,.11],[.13,.67,.08]], .012, M.rubber, 30);
+        // Transparent hanging bag with a visible sealed bottom.
+        box(pole, 'fluid bag', -.02, 2.14, 0, .28, .39, .07, M.clear, { cast: false });
+        cylinder(pole, 'bag cap', -.02, 1.93, 0, .035, .035, .05, M.blue, 16);
+        tube(pole, 'IV bag hanger', [[0,2.58,0],[0,2.69,0],[.13,2.75,0],[.24,2.75,0]], .024, M.steel, 24);
+        label(`IV PUMP ${n}`, [x, 2.96, z]);
+      }
+      ivPole(-2.05, -4.05, 1); ivPole(-2.35, -2.65, 2); ivPole(-2.12, -1.25, 3);
+
+      // Ventilator model is intentionally pending; the named location contains no substitute equipment.
+      const ventilator = new THREE.Group(); ventilator.name = 'ventilator'; ventilator.position.set(3.65, .025, -2.1); scene.add(ventilator); sceneObjects.ventilator = ventilator;
+      const footprint = cylinder(ventilator, 'ventilator staged location marker', 0, .015, 0, .52, .52, .03, M.accent, 48);
+      footprint.material = new THREE.MeshStandardMaterial({ color: '#ddd8ca', roughness: .75, transparent: true, opacity: .75 });
+      label('VENTILATOR · MODEL PENDING', [3.65, 1.1, -2.1], { pending: true }); ventilator.userData.staged = true;
+      // Disconnected corrugated breathing circuit remains coiled beside the staged location.
+      const coilPoints = [];
+      for (let i = 0; i <= 120; i++) { const t = i / 120 * Math.PI * 3.2; coilPoints.push([.7 + .25 * Math.cos(t), .09 + .055 * Math.sin(t * 2), .28 * Math.sin(t)]); }
+      tube(ventilator, 'disconnected ventilator circuit coil', coilPoints, .035, M.rubber, 180);
+
+      // Crash/medication cart as a supporting prop; restrained dimensional details.
+      const crashCart = new THREE.Group(); crashCart.name = 'crashCart'; crashCart.position.set(4.55, 0, .8); scene.add(crashCart); sceneObjects.crashCart = crashCart;
+      box(crashCart, 'crash cart chassis', 0, .92, 0, .95, 1.52, .72, M.porcelain);
+      box(crashCart, 'crash cart top', 0, 1.72, 0, 1.08, .1, .82, M.blue);
+      for (const y of [1.45, 1.17, .89, .61]) {
+        box(crashCart, 'drawer front', 0, y, .37, .76, .19, .035, M.accent);
+        box(crashCart, 'drawer pull', 0, y, .40, .23, .025, .02, M.steel);
+      }
+      box(crashCart, 'defibrillator module', 0, 2.02, 0, .78, .38, .56, M.ink);
+      box(crashCart, 'defibrillator screen', 0, 2.04, .29, .39, .2, .02, M.screen, { cast: false });
+      for (const x of [-.37,.37]) for (const z of [-.25,.25]) { const w = cylinder(crashCart, 'crash cart caster', x, .12, z, .075, .075, .12, M.ink, 20); w.rotation.x = Math.PI / 2; }
+      label('CRASH / MEDICATION CART', [4.55, 2.55, .8]);
+
+      // Wall suction canister, sharp container, and disposable supply details.
+      const suction = new THREE.Group(); suction.name = 'suction'; suction.position.set(2.45, 0, -5.2); scene.add(suction); sceneObjects.suction = suction;
+      cylinder(suction, 'suction collection canister', 0, 1.76, .18, .19, .16, .6, M.clear, 32);
+      cylinder(suction, 'suction canister lid', 0, 2.08, .18, .2, .2, .08, M.blue, 32);
+      box(suction, 'suction wall bracket', 0, 1.76, -.01, .36, .11, .11, M.steel);
+      cylinder(suction, 'suction regulator', 0, 2.38, .18, .105, .105, .23, M.porcelain, 24);
+      cylinder(suction, 'suction gauge', 0, 2.54, .23, .09, .09, .04, M.porcelain, 24).rotation.x = Math.PI / 2;
+      label('WALL SUCTION', [2.45, 2.95, -5.05]);
+      const sharps = new THREE.Group(); sharps.name = 'sharpsContainer'; sharps.position.set(-5.82, 0, -4.72); scene.add(sharps); sceneObjects.sharpsContainer = sharps;
+      box(sharps, 'sharps container body', 0, 1.72, 0, .43, .53, .36, M.amber);
+      box(sharps, 'sharps container lid', 0, 2.0, 0, .47, .07, .39, M.porcelain);
+      box(sharps, 'sharps opening', 0, 2.04, .04, .17, .02, .12, M.ink);
+
+      // Ceiling light above the bed provides a warm clinical pool without obscuring the room.
+      box(scene, 'exam light housing', -.35, 5.48, -2.55, 2.4, .13, 1.05, M.porcelain);
+      box(scene, 'exam light diffuser', -.35, 5.405, -2.55, 2.12, .025, .82, new THREE.MeshBasicMaterial({ color: '#fff6e5' }), { cast: false });
+      const exam = new THREE.SpotLight('#fff0d7', 58, 11, Math.PI / 3.4, .6, 1.5);
+      exam.position.set(-.35, 5.3, -2.55); exam.target.position.set(0, 1.1, -3.1); scene.add(exam, exam.target);
+    }
+
+    function addResize() {
+      function resize() { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); }
+      addEventListener('resize', resize, { passive: true });
+    }
+    window.sceneObjects = sceneObjects;
+    window.scene = scene;
+    window.camera = camera;
+    window.controls = controls;
+    buildRoom().then(() => {
+      addResize();
+      document.querySelector('#loading').hidden = true;
+      renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); });
+    }).catch(error => {
+      document.querySelector('#loading').textContent = 'Room assets could not be loaded';
+      console.error('SICU scene load failed:', error);
+    });
+  </script>
+</body>
+</html>
