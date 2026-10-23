@@ -61,5 +61,162 @@ try {
  window.sicu={scene,root,camera,renderer,controls,objects,setView,render};setView('room');loading.classList.add('hidden');
 }catch(e){fail(e);}
 </script>
+<!-- Phase 1: additive monitor UI; the room module and embedded model above are unchanged. -->
+<div id="sicu-clock" role="group" aria-label="Simulation clock" style="display:none;position:fixed;top:82px;left:28px;z-index:4;align-items:center;gap:4px;padding:6px 9px;background:#fffffff2;border:1px solid #e0e2dc;border-radius:10px;box-shadow:0 3px 16px #20231e12">
+  <time id="sicu-time" aria-label="Elapsed simulation time" style="font:500 17px ui-monospace,monospace;font-variant-numeric:tabular-nums;margin-right:8px">00:00</time>
+  <button type="button" data-sicu-speed="1" aria-pressed="true">1x</button>
+  <button type="button" data-sicu-speed="60" aria-pressed="false">60x</button>
+  <button type="button" id="sicu-pause" aria-pressed="false">Pause</button>
+</div>
+<div id="sicu-monitor" role="region" aria-label="Live bedside monitor" style="display:none;position:fixed;right:24px;bottom:88px;z-index:4;width:min(372px,calc(100vw - 32px));border:5px solid #292e31;border-radius:12px;overflow:hidden;background:#091010;box-shadow:0 8px 30px #0c151533;pointer-events:none">
+  <canvas id="sicu-monitor-canvas" role="img" aria-label="ECG and vital signs" style="width:100%;height:auto;aspect-ratio:362/224"></canvas>
+</div>
+<script>
+(() => {
+  'use strict';
+  function attachMonitor() {
+    if (!window.sicu) {
+      // Wait for the existing asynchronous room module; never replace its API object.
+      if (!document.getElementById('error').textContent) requestAnimationFrame(attachMonitor);
+      return;
+    }
+    const api = window.sicu;
+    const vitals = {hr:72, spo2:98, nibpSys:118, nibpDia:76, rr:16, temp:37.1};
+    const clock = {simMinutes:0, speed:1, paused:false};
+    const clockPanel = document.getElementById('sicu-clock');
+    const timeLabel = document.getElementById('sicu-time');
+    const pauseButton = document.getElementById('sicu-pause');
+    const speedButtons = [...clockPanel.querySelectorAll('[data-sicu-speed]')];
+    const monitorPanel = document.getElementById('sicu-monitor');
+    const canvas = document.getElementById('sicu-monitor-canvas');
+    const ctx = canvas.getContext('2d');
+    const sampleHz = 120, samplesPerTick = sampleHz / 4, historySeconds = 6;
+    const trace = new Float32Array(sampleHz * historySeconds);
+    let seed = 0x51c0001, simSeconds = 0, sampleIndex = 0, writeIndex = 0, filled = 0, phase = 0;
+    let lastWallTime = performance.now();
+
+    // Fixed seeded steps make the same simulated duration independent of frame rate/speed.
+    function random() {
+      seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+      return seed / 4294967296;
+    }
+    function walk(key, step, low, high) {
+      vitals[key] = Math.min(high, Math.max(low, vitals[key] + (random() * 2 - 1) * step));
+    }
+    function updateVitals() {
+      walk('hr', .12, 60, 100);
+      walk('spo2', .018, 95, 100);
+      walk('rr', .035, 12, 20);
+      walk('temp', .0008, 36.5, 37.5);
+      // NIBP stays at 118/76; no NIBP drift range was specified for Phase 1.
+    }
+    function ecg(p) {
+      const g = (center, width) => Math.exp(-.5 * ((p - center) / width) ** 2);
+      return .12*g(.18,.032) - .14*g(.355,.012) + g(.39,.011) - .25*g(.425,.016) + .25*g(.66,.07);
+    }
+    function advance(now) {
+      const elapsed = Math.max(0, now - lastWallTime) / 1000;
+      lastWallTime = now;
+      if (clock.paused) return;
+      simSeconds += elapsed * clock.speed;
+      const targetSample = Math.floor(simSeconds * sampleHz + 1e-7);
+      while (sampleIndex < targetSample) {
+        sampleIndex++;
+        if (sampleIndex % samplesPerTick === 0) updateVitals();
+        phase = (phase + vitals.hr / (60 * sampleHz)) % 1;
+        trace[writeIndex] = ecg(phase);
+        writeIndex = (writeIndex + 1) % trace.length;
+        filled = Math.min(filled + 1, trace.length);
+      }
+      clock.simMinutes = simSeconds / 60;
+    }
+    function syncButtons() {
+      for (const button of speedButtons) {
+        const active = Number(button.dataset.sicuSpeed) === clock.speed;
+        button.setAttribute('aria-pressed', String(active));
+        button.style.background = active ? '#343a36' : 'transparent';
+        button.style.color = active ? '#ffffff' : '#5d615c';
+      }
+      pauseButton.textContent = clock.paused ? 'Resume' : 'Pause';
+      pauseButton.setAttribute('aria-pressed', String(clock.paused));
+    }
+    function setSpeed(speed) {
+      if (speed !== 1 && speed !== 60) throw new RangeError('Simulation speed must be 1 or 60.');
+      advance(performance.now());
+      clock.speed = speed;
+      syncButtons();
+    }
+    function pause() {
+      advance(performance.now());
+      clock.paused = true;
+      syncButtons();
+      draw();
+    }
+    function resume() {
+      if (clock.paused) lastWallTime = performance.now();
+      clock.paused = false;
+      syncButtons();
+    }
+    // Only add the five Phase 1 members. Existing scene, controls, objects and functions retain identity.
+    Object.assign(api, {vitals, clock, setSpeed, pause, resume});
+    speedButtons.forEach(button => button.addEventListener('click', () => setSpeed(Number(button.dataset.sicuSpeed))));
+    pauseButton.addEventListener('click', () => clock.paused ? resume() : pause());
+
+    function resizeCanvas() {
+      const ratio = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.width = Math.round(362 * ratio);
+      canvas.height = Math.round(224 * ratio);
+      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+    }
+    function label(text, x, y, color, size = 11) {
+      ctx.fillStyle = color;
+      ctx.font = `${size >= 20 ? '500' : '400'} ${size}px ui-monospace,monospace`;
+      ctx.fillText(text, x, y);
+    }
+    function draw() {
+      const totalMinutes = Math.floor(clock.simMinutes);
+      timeLabel.textContent = `${String(Math.floor(totalMinutes / 60)).padStart(2,'0')}:${String(totalMinutes % 60).padStart(2,'0')}`;
+      timeLabel.dateTime = `PT${Math.floor(simSeconds)}S`;
+      ctx.fillStyle = '#091010';
+      ctx.fillRect(0, 0, 362, 224);
+      label('ECG II', 14, 20, '#71eaa0');
+      label('6 s', 321, 20, '#7d9690');
+      ctx.strokeStyle = '#142522'; ctx.lineWidth = .6;
+      ctx.beginPath();
+      for (let x = 14; x <= 348; x += 14) {ctx.moveTo(x,30); ctx.lineTo(x,112);}
+      for (let y = 30; y <= 112; y += 14) {ctx.moveTo(14,y); ctx.lineTo(348,y);}
+      ctx.stroke();
+      ctx.strokeStyle = '#62f18c'; ctx.lineWidth = 1.5;
+      ctx.lineJoin = 'round'; ctx.beginPath();
+      const start = (writeIndex - filled + trace.length) % trace.length;
+      for (let i = 0; i < filled; i++) {
+        const x = 14 + (trace.length - filled + i) / (trace.length - 1) * 334;
+        const y = 90 - trace[(start + i) % trace.length] * 48;
+        if (i === 0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+      }
+      ctx.stroke();
+      ctx.strokeStyle = '#263331'; ctx.lineWidth = 1;
+      ctx.beginPath();ctx.moveTo(14,120);ctx.lineTo(348,120);ctx.stroke();
+      label('HR',14,142,'#62f18c'); label('bpm',70,142,'#7d9690');
+      label(String(Math.round(vitals.hr)),14,177,'#62f18c',34);
+      label('SpO2',132,142,'#82bfff'); label('%',190,142,'#7d9690');
+      label(String(Math.round(vitals.spo2)),132,177,'#82bfff',34);
+      label('RR',250,142,'#ffda7b'); label('/min',294,142,'#7d9690');
+      label(String(Math.round(vitals.rr)),250,177,'#ffda7b',34);
+      label('NIBP',14,207,'#d9e4df');
+      label(`${Math.round(vitals.nibpSys)}/${Math.round(vitals.nibpDia)}`,79,209,'#f2f5f3',23);
+      label('mmHg',185,207,'#7d9690');
+      const description = `ECG, heart rate ${Math.round(vitals.hr)} beats per minute, oxygen saturation ${Math.round(vitals.spo2)} percent, blood pressure ${Math.round(vitals.nibpSys)} over ${Math.round(vitals.nibpDia)}, respiratory rate ${Math.round(vitals.rr)} per minute`;
+      if (canvas.getAttribute('aria-label') !== description) canvas.setAttribute('aria-label',description);
+    }
+    clockPanel.style.display = 'flex'; monitorPanel.style.display = 'block';
+    resizeCanvas(); syncButtons();
+    window.addEventListener('resize', resizeCanvas);
+    function frame(now) {advance(now); draw(); requestAnimationFrame(frame);}
+    requestAnimationFrame(frame);
+  }
+  attachMonitor();
+})();
+</script>
 </body>
 </html>
