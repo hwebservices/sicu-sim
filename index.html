@@ -76,7 +76,8 @@ try {
   <canvas id="sicu-monitor-canvas" role="img" aria-label="ECG and vital signs" style="width:100%;height:auto;aspect-ratio:362/224"></canvas>
 </div>
 <aside id="sicu-interventions" aria-label="Interventions" style="display:none;position:fixed;left:18px;bottom:24px;z-index:5;width:min(340px,calc(100vw - 36px));max-height:48vh;overflow:auto;padding:13px 15px;background:#fffffff2;border:1px solid #e0e2dc;border-radius:12px;box-shadow:0 4px 22px #20231e16">
-  <div style="font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:#686b68;margin-bottom:8px">Interventions</div>
+  <button type="button" id="sicu-interventions-toggle" aria-expanded="true" aria-controls="sicu-interventions-content" style="width:100%;display:flex;align-items:center;justify-content:space-between;padding:0 2px 8px;font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:#686b68"><span>Interventions</span><span id="sicu-interventions-chevron">−</span></button>
+  <div id="sicu-interventions-content">
   <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;font-size:10px;color:#555b55"><label for="sicu-diagnosis-select">Diagnosis</label><select id="sicu-diagnosis-select" aria-label="Diagnosis" style="max-width:76%;padding:5px 7px;border:1px solid #d9ddd6;border-radius:6px;background:#fff;color:#343a36;font:11px Arial,sans-serif"></select></div>
   <div style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#747871;margin-bottom:8px">Progress: <strong id="sicu-progress" aria-live="polite" style="color:#59625a">On track</strong></div>
   <div id="sicu-scenario-label" style="font-size:11px;font-weight:600;color:#8b4d28;margin-bottom:10px">DRAFT — clinical review required · Post-op septic shock (DRAFT)</div>
@@ -84,6 +85,7 @@ try {
   <div class="sicu-group"><div>MEDS</div><button type="button" data-intervention="Norepinephrine infusion">Norepinephrine infusion</button><button type="button" data-intervention="Vancomycin IV">Vancomycin IV</button><button type="button" data-intervention="Insulin infusion">Insulin infusion</button><button type="button" data-intervention="Propofol sedation">Propofol sedation</button></div>
   <div class="sicu-group"><div>FLUIDS</div><button type="button" data-intervention="NS 500mL bolus">NS 500mL bolus</button><button type="button" data-intervention="LR 500mL bolus">LR 500mL bolus</button><button type="button" data-intervention="Blood transfusion (1 unit)">Blood transfusion (1 unit)</button></div>
   <div class="sicu-group"><div>EQUIPMENT</div><button type="button" data-intervention="FiO2 +10%">FiO2 +10%</button><button type="button" data-intervention="FiO2 -10%">FiO2 -10%</button><button type="button" data-intervention="PEEP +2">PEEP +2</button><button type="button" data-intervention="PEEP -2">PEEP -2</button></div>
+  </div>
 </aside>
 <div id="sicu-intervention-chip" role="status" aria-live="polite" style="position:fixed;left:50%;top:18px;z-index:20;transform:translateX(-50%);padding:9px 13px;border-radius:9px;background:#28312f;color:#fff;font:12px ui-monospace,monospace;box-shadow:0 4px 20px #0003;opacity:0;pointer-events:none;transition:opacity .25s"></div>
 <div id="sicu-pain-badge" role="status" aria-live="polite" style="display:none;position:fixed;left:50%;top:40%;z-index:8;transform:translate(-50%,-50%);padding:7px 11px;border-radius:8px;background:#fffffff0;border:1px solid #d8c7bd;color:#633d32;font:600 12px Arial,sans-serif;box-shadow:0 3px 14px #20231e24;pointer-events:none"></div>
@@ -118,6 +120,9 @@ try {
     const interventionPanel = document.getElementById('sicu-interventions');
     const eventPanel = document.getElementById('sicu-event-panel');
     const eventList = document.getElementById('sicu-event-list');
+    const interventionToggle = document.getElementById('sicu-interventions-toggle');
+    const interventionContent = document.getElementById('sicu-interventions-content');
+    const interventionChevron = document.getElementById('sicu-interventions-chevron');
     const painSelect = document.getElementById('sicu-pain-select');
     const painBadge = document.getElementById('sicu-pain-badge');
     const interventionChip = document.getElementById('sicu-intervention-chip');
@@ -396,6 +401,13 @@ try {
     }
     diagnosisSelect.value = scenario.id;
     diagnosisSelect.addEventListener('change', () => setDiagnosis(diagnosisSelect.value));
+    function setInterventionExpanded(expanded) {
+      interventionContent.style.display = expanded ? 'block' : 'none';
+      interventionToggle.setAttribute('aria-expanded',String(expanded));
+      interventionChevron.textContent = expanded ? '−' : '+';
+    }
+    setInterventionExpanded(!window.matchMedia('(max-width: 700px)').matches);
+    interventionToggle.addEventListener('click', () => setInterventionExpanded(interventionContent.style.display === 'none'));
     document.querySelectorAll('[data-intervention]').forEach(button => button.addEventListener('click', () => intervene(button.dataset.intervention)));
     painSelect.addEventListener('change', () => {
       const level = painSelect.value;
