@@ -71,6 +71,21 @@ try {
 <div id="sicu-monitor" role="region" aria-label="Live bedside monitor" style="display:none;position:fixed;right:24px;bottom:88px;z-index:4;width:min(372px,calc(100vw - 32px));border:5px solid #292e31;border-radius:12px;overflow:hidden;background:#091010;box-shadow:0 8px 30px #0c151533;pointer-events:none">
   <canvas id="sicu-monitor-canvas" role="img" aria-label="ECG and vital signs" style="width:100%;height:auto;aspect-ratio:362/224"></canvas>
 </div>
+<aside id="sicu-interventions" aria-label="Interventions" style="display:none;position:fixed;left:18px;bottom:24px;z-index:5;width:min(340px,calc(100vw - 36px));max-height:48vh;overflow:auto;padding:13px 15px;background:#fffffff2;border:1px solid #e0e2dc;border-radius:12px;box-shadow:0 4px 22px #20231e16">
+  <div style="font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:#686b68;margin-bottom:8px">Interventions</div>
+  <div id="sicu-scenario-label" style="font-size:11px;font-weight:600;color:#8b4d28;margin-bottom:10px">DRAFT — clinical review required · Post-op septic shock (DRAFT)</div>
+  <div class="sicu-group"><div>MEDS</div><button type="button" data-intervention="Norepinephrine infusion">Norepinephrine infusion</button><button type="button" data-intervention="Vancomycin IV">Vancomycin IV</button><button type="button" data-intervention="Insulin infusion">Insulin infusion</button><button type="button" data-intervention="Propofol sedation">Propofol sedation</button></div>
+  <div class="sicu-group"><div>FLUIDS</div><button type="button" data-intervention="NS 500mL bolus">NS 500mL bolus</button><button type="button" data-intervention="LR 500mL bolus">LR 500mL bolus</button></div>
+  <div class="sicu-group"><div>EQUIPMENT</div><button type="button" data-intervention="FiO2 +10%">FiO2 +10%</button><button type="button" data-intervention="FiO2 -10%">FiO2 -10%</button><button type="button" data-intervention="PEEP +2">PEEP +2</button><button type="button" data-intervention="PEEP -2">PEEP -2</button></div>
+</aside>
+<aside id="sicu-event-panel" aria-label="Event log" style="display:none;position:fixed;right:18px;top:76px;z-index:5;width:min(310px,calc(100vw - 36px));background:#fffffff2;border:1px solid #e0e2dc;border-radius:12px;box-shadow:0 4px 22px #20231e16;overflow:hidden">
+  <button type="button" id="sicu-event-toggle" aria-expanded="true" style="width:100%;display:flex;justify-content:space-between;font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase"><span>Event log</span><span id="sicu-event-chevron">−</span></button>
+  <ol id="sicu-event-list" aria-live="polite" style="margin:0;padding:0 14px 12px 34px;max-height:34vh;overflow:auto;font:11px/1.55 ui-monospace,monospace;color:#414541"></ol>
+</aside>
+<style>
+.sicu-group{display:flex;flex-wrap:wrap;gap:4px;margin:8px 0}.sicu-group>div{flex-basis:100%;font-size:9px;letter-spacing:.12em;color:#747871;margin-bottom:1px}.sicu-group button{border:1px solid #d9ddd6;background:#f7f8f5;padding:6px 8px;font-size:10px;white-space:nowrap}.sicu-group button:hover{background:#e8ece5}
+@media(max-width:700px){#sicu-interventions{left:8px;bottom:8px;width:min(330px,calc(100vw - 16px));max-height:40vh}#sicu-event-panel{right:8px;top:54px;width:min(290px,calc(100vw - 16px))}}
+</style>
 <script>
 (() => {
   'use strict';
@@ -81,13 +96,36 @@ try {
       return;
     }
     const api = window.sicu;
-    const vitals = {hr:72, spo2:98, nibpSys:118, nibpDia:76, rr:16, temp:37.1};
+    const vitals = {hr:72, spo2:98, nibpSys:118, nibpDia:76, rr:16, temp:37.1, glucose:142};
+    const phase1Vitals = {...vitals};
     const clock = {simMinutes:0, speed:1, paused:false};
     const clockPanel = document.getElementById('sicu-clock');
     const timeLabel = document.getElementById('sicu-time');
     const pauseButton = document.getElementById('sicu-pause');
     const speedButtons = [...clockPanel.querySelectorAll('[data-sicu-speed]')];
     const monitorPanel = document.getElementById('sicu-monitor');
+    const interventionPanel = document.getElementById('sicu-interventions');
+    const eventPanel = document.getElementById('sicu-event-panel');
+    const eventList = document.getElementById('sicu-event-list');
+    const scenario = {name:'Post-op septic shock (DRAFT)', events:[
+      {tMin:0,set:{temp:38.9,hr:108,nibpSys:92,nibpDia:58,rr:22,spo2:94},note:'Fever spike, hypotensive'},
+      {tMin:30,set:{temp:39.2,hr:115},note:'Fever persists without antibiotics'},
+      {tMin:60,set:{nibpSys:84,nibpDia:52,hr:122},note:'Deteriorating without resuscitation'}
+    ]};
+    const interventionDefinitions = {
+      'Norepinephrine infusion':{delta:{nibpSys:18,nibpDia:12,hr:8},onsetMin:5,peakMin:15,durationMin:120},
+      'NS 500mL bolus':{delta:{nibpSys:8,nibpDia:5,hr:-4},onsetMin:10,peakMin:20,durationMin:90},
+      'LR 500mL bolus':{delta:{nibpSys:8,nibpDia:5,hr:-4},onsetMin:10,peakMin:20,durationMin:90},
+      'Vancomycin IV':{delta:{temp:-.8,hr:-6},onsetMin:30,peakMin:90,durationMin:240},
+      'Insulin infusion':{delta:{glucose:-35},onsetMin:20,peakMin:60,durationMin:180},
+      'Propofol sedation':{delta:{rr:-3,hr:-5},onsetMin:3,peakMin:10,durationMin:60},
+      'FiO2 +10%':{delta:{spo2:1.5},onsetMin:3,peakMin:5,durationMin:10080},
+      'FiO2 -10%':{delta:{spo2:-1.5},onsetMin:3,peakMin:5,durationMin:10080},
+      'PEEP +2':{delta:{spo2:1,rr:-1},onsetMin:5,peakMin:10,durationMin:10080},
+      'PEEP -2':{delta:{spo2:-1,rr:1},onsetMin:5,peakMin:10,durationMin:10080}
+    };
+    const interventions = [], scenarioOffsets = {}, scenarioTweens = {};
+    let nextScenarioEvent = 0;
     const canvas = document.getElementById('sicu-monitor-canvas');
     const ctx = canvas.getContext('2d');
     const sampleHz = 120, samplesPerTick = sampleHz / 4, historySeconds = 6;
@@ -104,11 +142,81 @@ try {
       vitals[key] = Math.min(high, Math.max(low, vitals[key] + (random() * 2 - 1) * step));
     }
     function updateVitals() {
+      // Restore the raw Phase 1 output before running its unchanged seeded drift steps.
+      Object.assign(vitals, phase1Vitals);
       walk('hr', .12, 60, 100);
       walk('spo2', .018, 95, 100);
       walk('rr', .035, 12, 20);
       walk('temp', .0008, 36.5, 37.5);
       // NIBP stays at 118/76; no NIBP drift range was specified for Phase 1.
+      Object.assign(phase1Vitals, vitals);
+      clock.simMinutes = simSeconds / 60;
+      applyModelOutput();
+    }
+    function timestamp(minutes = clock.simMinutes) {
+      const total = Math.max(0, Math.floor(minutes));
+      return `${String(Math.floor(total / 60)).padStart(2,'0')}:${String(total % 60).padStart(2,'0')}`;
+    }
+    function addLog(message, minutes = clock.simMinutes) {
+      const item = document.createElement('li');
+      item.textContent = `${timestamp(minutes)}  ${message}`;
+      eventList.appendChild(item);
+      eventList.scrollTop = eventList.scrollHeight;
+    }
+    function scenarioOffsetAt(key, minutes) {
+      const tween = scenarioTweens[key];
+      if (!tween) return scenarioOffsets[key] || 0;
+      const progress = Math.min(1, Math.max(0, (minutes - tween.start) / (tween.end - tween.start)));
+      return tween.from + (tween.to - tween.from) * progress;
+    }
+    function processScenarioEvents(minutes) {
+      while (nextScenarioEvent < scenario.events.length && scenario.events[nextScenarioEvent].tMin <= minutes) {
+        const event = scenario.events[nextScenarioEvent++];
+        for (const [key, target] of Object.entries(event.set)) {
+          const from = scenarioOffsetAt(key, event.tMin);
+          scenarioTweens[key] = {from, to:target - phase1Vitals[key], start:event.tMin, end:event.tMin + 5};
+        }
+        addLog(`${scenario.name} · ${event.note}`, event.tMin);
+      }
+    }
+    function effectAt(entry, minutes) {
+      const {onsetMin, peakMin, durationMin} = entry.definition;
+      const elapsed = minutes - entry.startMin;
+      if (elapsed <= onsetMin || elapsed >= durationMin) return 0;
+      if (elapsed < peakMin) return (elapsed - onsetMin) / (peakMin - onsetMin);
+      const waneStart = durationMin * .75;
+      if (elapsed <= waneStart) return 1;
+      return (durationMin - elapsed) / (durationMin - waneStart);
+    }
+    function applyModelOutput() {
+      const minutes = clock.simMinutes;
+      processScenarioEvents(minutes);
+      const totals = {};
+      for (const [key, tween] of Object.entries(scenarioTweens)) {
+        const offset = scenarioOffsetAt(key, minutes);
+        scenarioOffsets[key] = offset;
+        if (minutes >= tween.end) delete scenarioTweens[key];
+        totals[key] = offset;
+      }
+      for (const entry of interventions) {
+        const weight = effectAt(entry, minutes);
+        for (const [key, delta] of Object.entries(entry.definition.delta)) totals[key] = (totals[key] || 0) + delta * weight;
+      }
+      // Single integration point: Phase 1 drift + scenario offset + summed intervention deltas.
+      for (const [key, delta] of Object.entries(totals)) {
+        const low = key === 'glucose' ? 70 : -Infinity;
+        const high = key === 'glucose' ? 300 : Infinity;
+        vitals[key] = Math.min(high, Math.max(low, (phase1Vitals[key] ?? 0) + delta));
+      }
+    }
+    function intervene(name) {
+      const definition = interventionDefinitions[name];
+      if (!definition) throw new RangeError(`Unknown intervention: ${name}`);
+      advance(performance.now());
+      interventions.push({name, definition, startMin:clock.simMinutes});
+      addLog(name);
+      applyModelOutput();
+      draw();
     }
     function ecg(p) {
       const g = (center, width) => Math.exp(-.5 * ((p - center) / width) ** 2);
@@ -123,6 +231,7 @@ try {
       while (sampleIndex < targetSample) {
         sampleIndex++;
         if (sampleIndex % samplesPerTick === 0) updateVitals();
+        clock.simMinutes = sampleIndex / sampleHz / 60;
         phase = (phase + vitals.hr / (60 * sampleHz)) % 1;
         trace[writeIndex] = ecg(phase);
         writeIndex = (writeIndex + 1) % trace.length;
@@ -158,7 +267,15 @@ try {
       syncButtons();
     }
     // Only add the five Phase 1 members. Existing scene, controls, objects and functions retain identity.
-    Object.assign(api, {vitals, clock, setSpeed, pause, resume});
+    Object.assign(api, {vitals, clock, setSpeed, pause, resume, intervene, scenario});
+    document.querySelectorAll('[data-intervention]').forEach(button => button.addEventListener('click', () => intervene(button.dataset.intervention)));
+    const eventToggle = document.getElementById('sicu-event-toggle');
+    eventToggle.addEventListener('click', () => {
+      const expanded = eventToggle.getAttribute('aria-expanded') === 'true';
+      eventToggle.setAttribute('aria-expanded', String(!expanded));
+      document.getElementById('sicu-event-list').style.display = expanded ? 'none' : 'block';
+      document.getElementById('sicu-event-chevron').textContent = expanded ? '+' : '−';
+    });
     speedButtons.forEach(button => button.addEventListener('click', () => setSpeed(Number(button.dataset.sicuSpeed))));
     pauseButton.addEventListener('click', () => clock.paused ? resume() : pause());
 
@@ -210,6 +327,8 @@ try {
       if (canvas.getAttribute('aria-label') !== description) canvas.setAttribute('aria-label',description);
     }
     clockPanel.style.display = 'flex'; monitorPanel.style.display = 'block';
+    interventionPanel.style.display = 'block'; eventPanel.style.display = 'block';
+    applyModelOutput();
     resizeCanvas(); syncButtons();
     window.addEventListener('resize', resizeCanvas);
     function frame(now) {advance(now); draw(); requestAnimationFrame(frame);}
