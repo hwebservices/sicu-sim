@@ -79,7 +79,7 @@ try {
   <div style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#747871;margin-bottom:8px">Progress: <strong id="sicu-progress" aria-live="polite" style="color:#59625a">On track</strong></div>
   <div id="sicu-scenario-label" style="font-size:11px;font-weight:600;color:#8b4d28;margin-bottom:10px">DRAFT — clinical review required · Post-op septic shock (DRAFT)</div>
   <div class="sicu-group"><div>MEDS</div><button type="button" data-intervention="Norepinephrine infusion">Norepinephrine infusion</button><button type="button" data-intervention="Vancomycin IV">Vancomycin IV</button><button type="button" data-intervention="Insulin infusion">Insulin infusion</button><button type="button" data-intervention="Propofol sedation">Propofol sedation</button></div>
-  <div class="sicu-group"><div>FLUIDS</div><button type="button" data-intervention="NS 500mL bolus">NS 500mL bolus</button><button type="button" data-intervention="LR 500mL bolus">LR 500mL bolus</button></div>
+  <div class="sicu-group"><div>FLUIDS</div><button type="button" data-intervention="NS 500mL bolus">NS 500mL bolus</button><button type="button" data-intervention="LR 500mL bolus">LR 500mL bolus</button><button type="button" data-intervention="Blood transfusion (1 unit)">Blood transfusion (1 unit)</button></div>
   <div class="sicu-group"><div>EQUIPMENT</div><button type="button" data-intervention="FiO2 +10%">FiO2 +10%</button><button type="button" data-intervention="FiO2 -10%">FiO2 -10%</button><button type="button" data-intervention="PEEP +2">PEEP +2</button><button type="button" data-intervention="PEEP -2">PEEP -2</button></div>
 </aside>
 <aside id="sicu-event-panel" aria-label="Event log" style="display:none;position:fixed;right:18px;top:76px;z-index:5;width:min(310px,calc(100vw - 36px));background:#fffffff2;border:1px solid #e0e2dc;border-radius:12px;box-shadow:0 4px 22px #20231e16;overflow:hidden">
@@ -136,13 +136,29 @@ try {
         {tMin:0,set:{glucose:420,hr:110,rr:24,temp:37.2,nibpSys:104,nibpDia:66,spo2:97},note:'Hyperglycemic, Kussmaul breathing'},
         {tMin:60,set:{glucose:380},note:'Still hyperglycemic without insulin'},
         {tMin:120,set:{glucose:340},note:'Slow improvement with fluids alone'}
-      ],targets:{glucose:[100,180],hr:[60,100]}}
+      ],targets:{glucose:[100,180],hr:[60,100]}},
+      postopHemorrhage:{id:'postopHemorrhage',name:'Post-op hemorrhage (DRAFT)',events:[
+        {tMin:0,set:{nibpSys:88,nibpDia:54,hr:122,spo2:95,rr:22,temp:36.4,glucose:150},note:'Post-op bleeding, hypotensive'},
+        {tMin:30,set:{nibpSys:82,hr:130},note:'Continued blood loss'},
+        {tMin:60,set:{nibpSys:78,hr:135,spo2:93},note:'Hemorrhagic shock'}
+      ],targets:{nibpSys:[90,120],hr:[60,100],spo2:[94,100]}},
+      giBleed:{id:'giBleed',name:'GI bleed (DRAFT)',events:[
+        {tMin:0,set:{nibpSys:96,nibpDia:60,hr:112,spo2:96,rr:20,temp:36.9,glucose:145},note:'Upper GI bleed, melena'},
+        {tMin:30,set:{hr:120,nibpSys:90},note:'Ongoing blood loss'},
+        {tMin:60,set:{nibpSys:84,hr:128},note:'Hemodynamic instability'}
+      ],targets:{nibpSys:[90,120],hr:[60,100]}},
+      pneumonia:{id:'pneumonia',name:'Pneumonia (DRAFT)',events:[
+        {tMin:0,set:{spo2:91,rr:26,hr:105,temp:38.7,nibpSys:108,nibpDia:68,glucose:165},note:'Severe pneumonia, febrile'},
+        {tMin:30,set:{spo2:89,temp:39.1},note:'Worsening hypoxemia'},
+        {tMin:60,set:{spo2:86,rr:30},note:'Respiratory failure'}
+      ],targets:{spo2:[94,100],rr:[12,20],temp:[36.5,37.5]}}
     };
     let scenario = DIAGNOSES.septicShock;
     const interventionDefinitions = {
       'Norepinephrine infusion':{delta:{nibpSys:18,nibpDia:12,hr:8},onsetMin:5,peakMin:15,durationMin:120},
       'NS 500mL bolus':{delta:{nibpSys:8,nibpDia:5,hr:-4},onsetMin:10,peakMin:20,durationMin:90},
       'LR 500mL bolus':{delta:{nibpSys:8,nibpDia:5,hr:-4},onsetMin:10,peakMin:20,durationMin:90},
+      'Blood transfusion (1 unit)':{delta:{nibpSys:10,nibpDia:6,hr:-8},onsetMin:15,peakMin:30,durationMin:240},
       'Vancomycin IV':{delta:{temp:-.8,hr:-6},onsetMin:30,peakMin:90,durationMin:240},
       'Insulin infusion':{delta:{glucose:-35},onsetMin:20,peakMin:60,durationMin:180},
       'Propofol sedation':{delta:{rr:-3,hr:-5},onsetMin:3,peakMin:10,durationMin:60},
