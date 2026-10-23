@@ -50,6 +50,8 @@ try {
  const reflection=new Reflector(new THREE.PlaneGeometry(4.97,3.97),{textureWidth:768,textureHeight:768,color:0xc8c5bc,clipBias:.003});reflection.name='floorReflection';reflection.rotation.x=-Math.PI/2;reflection.position.y=.003;reflection.material.transparent=true;reflection.material.depthWrite=false;reflection.material.fragmentShader=reflection.material.fragmentShader.replace('#include <tonemapping_fragment>','gl_FragColor.a = 0.055;\n#include <tonemapping_fragment>');scene.add(reflection);
  const composer=new EffectComposer(renderer);composer.renderTarget1.samples=4;composer.renderTarget2.samples=4;composer.addPass(new RenderPass(scene,camera));const ao=new SSAOPass(scene,camera,innerWidth,innerHeight);ao.kernelRadius=9;ao.minDistance=.002;ao.maxDistance=.14;composer.addPass(ao);composer.addPass(new OutputPass());
  const majorNames=['bed','patient','ventilator','monitor','ivPump1','ivPump2','headwallUnit','suctionRegulator','crashCart','bedsideTable','overbedTable','stool','door','handSanitizer','whiteboard','wallClock','wallHandrail','window','ceilingPanels'];const objects={};for(const name of majorNames)objects[name]=root.getObjectByName(name);
+ const patientSkinColors=new Map();const cyanoticSkinColor=new THREE.Color('#7892a3');objects.patient?.traverse(o=>{if(!o.isMesh)return;const arr=Array.isArray(o.material)?o.material:[o.material];for(const m of arr)if(m?.color&&/skin/i.test(m.name)&&!patientSkinColors.has(m))patientSkinColors.set(m,m.color.clone());});
+ function setCyanosis(spo2){const strength=THREE.MathUtils.clamp((90-spo2)/90,0,1);for(const [material,baseColor] of patientSkinColors)material.color.copy(baseColor).lerp(cyanoticSkinColor,strength);render();}
  const views={room:{position:[2.1,3.65,6.45],target:[0,1.2,-.1]},bed:{position:[1.45,2.12,2.0],target:[0,.91,-.72]},headwall:{position:[.1,1.9,.68],target:[0,1.5,-1.68]}};
  let rendering=false;
  function constrain(){controls.target.x=THREE.MathUtils.clamp(controls.target.x,-1.6,1.6);controls.target.y=THREE.MathUtils.clamp(controls.target.y,.35,1.95);controls.target.z=THREE.MathUtils.clamp(controls.target.z,-1.65,1);camera.position.x=THREE.MathUtils.clamp(camera.position.x,-2.28,2.28);camera.position.y=THREE.MathUtils.clamp(camera.position.y,.3,5.2);camera.position.z=Math.max(camera.position.z,-1.65);if(camera.position.z<2.15)camera.position.y=Math.min(camera.position.y,2.68);camera.lookAt(controls.target);}
@@ -60,7 +62,7 @@ try {
  document.addEventListener('keydown',e=>{if(e.key.toLowerCase()==='r')setView('room');});
  addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);composer.setSize(innerWidth,innerHeight);render();});
  renderer.domElement.addEventListener('webglcontextlost',e=>{e.preventDefault();fail(new Error('Graphics context was lost. Reload the file to restore the room.'));});
- window.sicu={scene,root,camera,renderer,controls,objects,setView,render};setView('room');loading.classList.add('hidden');
+ window.sicu={scene,root,camera,renderer,controls,objects,setView,render,setCyanosis};setView('room');loading.classList.add('hidden');
 }catch(e){fail(e);}
 </script>
 <!-- Phase 1: additive monitor UI; the room module and embedded model above are unchanged. -->
@@ -78,17 +80,20 @@ try {
   <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;font-size:10px;color:#555b55"><label for="sicu-diagnosis-select">Diagnosis</label><select id="sicu-diagnosis-select" aria-label="Diagnosis" style="max-width:76%;padding:5px 7px;border:1px solid #d9ddd6;border-radius:6px;background:#fff;color:#343a36;font:11px Arial,sans-serif"></select></div>
   <div style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#747871;margin-bottom:8px">Progress: <strong id="sicu-progress" aria-live="polite" style="color:#59625a">On track</strong></div>
   <div id="sicu-scenario-label" style="font-size:11px;font-weight:600;color:#8b4d28;margin-bottom:10px">DRAFT — clinical review required · Post-op septic shock (DRAFT)</div>
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;font-size:10px;color:#555b55"><label for="sicu-pain-select">Pain</label><select id="sicu-pain-select" aria-label="Pain level" style="max-width:76%;padding:5px 7px;border:1px solid #d9ddd6;border-radius:6px;background:#fff;color:#343a36;font:11px Arial,sans-serif"><option>None</option><option>Mild</option><option>Moderate</option><option>Severe</option></select></div>
   <div class="sicu-group"><div>MEDS</div><button type="button" data-intervention="Norepinephrine infusion">Norepinephrine infusion</button><button type="button" data-intervention="Vancomycin IV">Vancomycin IV</button><button type="button" data-intervention="Insulin infusion">Insulin infusion</button><button type="button" data-intervention="Propofol sedation">Propofol sedation</button></div>
   <div class="sicu-group"><div>FLUIDS</div><button type="button" data-intervention="NS 500mL bolus">NS 500mL bolus</button><button type="button" data-intervention="LR 500mL bolus">LR 500mL bolus</button><button type="button" data-intervention="Blood transfusion (1 unit)">Blood transfusion (1 unit)</button></div>
   <div class="sicu-group"><div>EQUIPMENT</div><button type="button" data-intervention="FiO2 +10%">FiO2 +10%</button><button type="button" data-intervention="FiO2 -10%">FiO2 -10%</button><button type="button" data-intervention="PEEP +2">PEEP +2</button><button type="button" data-intervention="PEEP -2">PEEP -2</button></div>
 </aside>
+<div id="sicu-intervention-chip" role="status" aria-live="polite" style="position:fixed;left:50%;top:18px;z-index:20;transform:translateX(-50%);padding:9px 13px;border-radius:9px;background:#28312f;color:#fff;font:12px ui-monospace,monospace;box-shadow:0 4px 20px #0003;opacity:0;pointer-events:none;transition:opacity .25s"></div>
+<div id="sicu-pain-badge" role="status" aria-live="polite" style="display:none;position:fixed;left:50%;top:40%;z-index:8;transform:translate(-50%,-50%);padding:7px 11px;border-radius:8px;background:#fffffff0;border:1px solid #d8c7bd;color:#633d32;font:600 12px Arial,sans-serif;box-shadow:0 3px 14px #20231e24;pointer-events:none"></div>
 <aside id="sicu-event-panel" aria-label="Event log" style="display:none;position:fixed;right:18px;top:76px;z-index:5;width:min(310px,calc(100vw - 36px));background:#fffffff2;border:1px solid #e0e2dc;border-radius:12px;box-shadow:0 4px 22px #20231e16;overflow:hidden">
   <button type="button" id="sicu-event-toggle" aria-expanded="true" style="width:100%;display:flex;justify-content:space-between;font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase"><span>Event log</span><span id="sicu-event-chevron">−</span></button>
   <ol id="sicu-event-list" aria-live="polite" style="margin:0;padding:0 14px 12px 34px;max-height:34vh;overflow:auto;font:11px/1.55 ui-monospace,monospace;color:#414541"></ol>
 </aside>
 <style>
 .sicu-group{display:flex;flex-wrap:wrap;gap:4px;margin:8px 0}.sicu-group>div{flex-basis:100%;font-size:9px;letter-spacing:.12em;color:#747871;margin-bottom:1px}.sicu-group button{border:1px solid #d9ddd6;background:#f7f8f5;padding:6px 8px;font-size:10px;white-space:nowrap}.sicu-group button:hover{background:#e8ece5}
-@media(max-width:700px){#sicu-interventions{left:8px;bottom:8px;width:min(330px,calc(100vw - 16px));max-height:40vh}#sicu-event-panel{right:8px;top:54px;width:min(290px,calc(100vw - 16px))}}
+@media(max-width:700px){#sicu-interventions{left:8px;bottom:8px;width:min(330px,calc(100vw - 16px));max-height:40vh}#sicu-event-panel{right:8px;top:54px;width:min(290px,calc(100vw - 16px))}#sicu-intervention-chip{top:8px;max-width:calc(100vw - 24px);white-space:normal;text-align:center}}
 </style>
 <script>
 (() => {
@@ -113,6 +118,10 @@ try {
     const interventionPanel = document.getElementById('sicu-interventions');
     const eventPanel = document.getElementById('sicu-event-panel');
     const eventList = document.getElementById('sicu-event-list');
+    const painSelect = document.getElementById('sicu-pain-select');
+    const painBadge = document.getElementById('sicu-pain-badge');
+    const interventionChip = document.getElementById('sicu-intervention-chip');
+    let interventionChipTimeout;
     const diagnosisSelect = document.getElementById('sicu-diagnosis-select');
     const progressLabel = document.getElementById('sicu-progress');
     const scenarioLabel = document.getElementById('sicu-scenario-label');
@@ -197,6 +206,7 @@ try {
       clock.simMinutes = simSeconds / 60;
       applyModelOutput();
       updateProgress();
+      api.setCyanosis(vitals.spo2);
     }
     function timestamp(minutes = clock.simMinutes) {
       const total = Math.max(0, Math.floor(minutes));
@@ -273,12 +283,19 @@ try {
       }
       progressLabel.textContent = allWithinTargets ? 'Improving' : worseningSideCount >= 2 ? 'Deteriorating' : 'On track';
     }
+    function showInterventionChip(name) {
+      interventionChip.textContent = `${name} · ${timestamp()}`;
+      interventionChip.style.opacity = '1';
+      clearTimeout(interventionChipTimeout);
+      interventionChipTimeout = setTimeout(() => {interventionChip.style.opacity = '0';},3000);
+    }
     function intervene(name) {
       const definition = interventionDefinitions[name];
       if (!definition) throw new RangeError(`Unknown intervention: ${name}`);
       advance(performance.now());
       interventions.push({name, definition, startMin:clock.simMinutes});
       addLog(name);
+      showInterventionChip(name);
       applyModelOutput();
       draw();
     }
@@ -318,6 +335,7 @@ try {
       addLog(`${scenario.name} · ${admission.note}`, 0);
       applyModelOutput();
       updateProgress();
+      api.setCyanosis(vitals.spo2);
       draw();
     }
     function ecg(p) {
@@ -379,6 +397,12 @@ try {
     diagnosisSelect.value = scenario.id;
     diagnosisSelect.addEventListener('change', () => setDiagnosis(diagnosisSelect.value));
     document.querySelectorAll('[data-intervention]').forEach(button => button.addEventListener('click', () => intervene(button.dataset.intervention)));
+    painSelect.addEventListener('change', () => {
+      const level = painSelect.value;
+      painBadge.textContent = `Pain: ${level}`;
+      painBadge.style.display = level === 'None' ? 'none' : 'block';
+      addLog(`Pain assessed: ${level}`);
+    });
     const eventToggle = document.getElementById('sicu-event-toggle');
     eventToggle.addEventListener('click', () => {
       const expanded = eventToggle.getAttribute('aria-expanded') === 'true';
@@ -440,6 +464,7 @@ try {
     interventionPanel.style.display = 'block'; eventPanel.style.display = 'block';
     applyModelOutput();
     updateProgress();
+    api.setCyanosis(vitals.spo2);
     resizeCanvas(); syncButtons();
     window.addEventListener('resize', resizeCanvas);
     function frame(now) {advance(now); draw(); requestAnimationFrame(frame);}
@@ -450,6 +475,7 @@ try {
 </script>
 <!-- Phase 3: presentation-only assessment and plan; Phase 1/2 simulation behavior is unchanged. -->
 <button id="sicu-assessment-toggle" type="button" aria-expanded="false" aria-controls="sicu-assessment-panel" style="position:fixed;left:28px;top:126px;z-index:7;padding:9px 13px;background:#fffffff2;border:1px solid #e0e2dc;box-shadow:0 3px 14px #20231e12">Assessment</button>
+<button id="sicu-report-toggle" type="button" aria-expanded="false" aria-controls="sicu-report-panel" style="position:fixed;right:278px;top:20px;z-index:7;padding:9px 13px;background:#fffffff2;border:1px solid #e0e2dc;box-shadow:0 3px 14px #20231e12">Report</button>
 <button id="sicu-present-toggle" type="button" aria-pressed="false" style="position:fixed;right:190px;top:20px;z-index:7;padding:9px 13px;background:#fffffff2;border:1px solid #e0e2dc;box-shadow:0 3px 14px #20231e12">Present</button>
 <section id="sicu-assessment-panel" aria-label="Assessment and plan" style="display:none;position:fixed;left:18px;top:174px;bottom:22px;z-index:6;width:min(470px,calc(100vw - 36px));overflow:auto;padding:18px;background:#fffffff5;border:1px solid #dfe2db;border-radius:13px;box-shadow:0 6px 28px #20231e1a">
   <header style="position:static;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;pointer-events:auto;margin-bottom:12px">
@@ -459,6 +485,11 @@ try {
   <div id="sicu-assessment-rows"></div>
   <div id="sicu-copy-status" role="status" aria-live="polite" style="font:11px ui-monospace,monospace;color:#59625a;margin-top:8px"></div>
 </section>
+<aside id="sicu-report-panel" aria-label="Daily report" style="display:none;position:fixed;right:18px;top:68px;bottom:18px;z-index:9;width:min(420px,calc(100vw - 36px));overflow:auto;padding:16px;background:#fffffff5;border:1px solid #dfe2db;border-radius:13px;box-shadow:0 6px 28px #20231e1a">
+  <header style="position:static;display:flex;align-items:center;justify-content:space-between;gap:12px;pointer-events:auto;margin-bottom:10px"><div><h2 style="font-size:16px;font-weight:550;margin:0">Daily report</h2><p style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#98582e;margin:5px 0 0">DRAFT — clinical review required</p></div><button type="button" id="sicu-copy-report" style="border:1px solid #d9ddd6;background:#f7f8f5;padding:8px 10px;white-space:nowrap">Copy report</button></header>
+  <pre id="sicu-report-content" style="white-space:pre-wrap;overflow-wrap:anywhere;margin:0;font:11px/1.55 ui-monospace,monospace;color:#414541"></pre>
+  <div id="sicu-report-status" role="status" aria-live="polite" style="font:11px ui-monospace,monospace;color:#59625a;margin-top:8px"></div>
+</aside>
 <style>
 #sicu-assessment-rows{display:flex;flex-direction:column;gap:7px}.sicu-assessment-row{border-top:1px solid #e5e7e2;padding:9px 0 3px}.sicu-assessment-row h3{font-size:12px;font-weight:600;margin:0 0 5px;color:#303732}.sicu-assessment-values,.sicu-assessment-draft,.sicu-assessment-unmodeled{font-size:11px;line-height:1.5;margin:3px 0;color:#515750}.sicu-assessment-draft{font-weight:550;color:#89522d}.sicu-assessment-plan{display:block;width:100%;min-height:42px;resize:vertical;margin:6px 0 0;padding:7px 8px;border:1px solid #d9ddd6;border-radius:7px;background:#fff;color:#292b2b;font:11px/1.45 Arial,sans-serif}.sicu-assessment-plan::placeholder{color:#8a8e88}
 body.sicu-present>header,body.sicu-present .help,body.sicu-present .tag,body.sicu-present .toolbar,body.sicu-present #sicu-clock{display:none!important}body.sicu-present #sicu-assessment-toggle{display:none!important}body.sicu-present #sicu-present-toggle{right:20px;top:16px;background:#fff;box-shadow:0 3px 18px #0002}body.sicu-present #sicu-interventions,body.sicu-present #sicu-event-panel{display:none!important}body.sicu-present #sicu-assessment-panel{display:block!important;inset:10px!important;width:auto!important;bottom:10px!important;max-height:none!important;border-radius:8px;padding:20px 24px 28px 24px;z-index:10}body.sicu-present #sicu-monitor{display:block!important;width:min(510px,44vw)!important;right:22px!important;bottom:22px!important;z-index:12;border-width:6px!important;box-shadow:0 12px 34px #0004!important}
@@ -469,6 +500,10 @@ body.sicu-present>header,body.sicu-present .help,body.sicu-present .tag,body.sic
   'use strict';
   const toggle = document.getElementById('sicu-assessment-toggle');
   const present = document.getElementById('sicu-present-toggle');
+  const reportToggle = document.getElementById('sicu-report-toggle');
+  const reportPanel = document.getElementById('sicu-report-panel');
+  const reportContent = document.getElementById('sicu-report-content');
+  const reportStatus = document.getElementById('sicu-report-status');
   const panel = document.getElementById('sicu-assessment-panel');
   const rowsRoot = document.getElementById('sicu-assessment-rows');
   const copyStatus = document.getElementById('sicu-copy-status');
@@ -579,6 +614,32 @@ body.sicu-present>header,body.sicu-present .help,body.sicu-present .tag,body.sic
       return [system.name,values,assessment,`Plan: ${elements.plan.value}`].filter(Boolean).join('\n');
     }).join('\n\n') + '\n\nEvent log\n' + (state.log.length ? state.log.join('\n') : 'No events recorded');
   }
+  function reportText() {
+    const api = window.sicu;
+    const diagnosis = api?.diagnosis;
+    const vitals = api?.vitals;
+    if (!diagnosis || !vitals) return '';
+    const admission = diagnosis.events.find(event => event.tMin === 0)?.set || {};
+    const formatVitals = values => Object.entries(values).map(([key,value]) => `${key}: ${value}`).join(' · ') || 'Not modeled';
+    const simTime = document.getElementById('sicu-time')?.textContent || '00:00';
+    const interventionNames = [...document.querySelectorAll('[data-intervention]')].map(button => button.dataset.intervention);
+    const log = eventMessages();
+    const given = log.filter(line => interventionNames.some(name => line.endsWith(`  ${name}`)));
+    const assessmentLines = [...document.querySelectorAll('.sicu-assessment-row')].flatMap(row => {
+      const draft = row.querySelector('.sicu-assessment-draft');
+      return draft && !draft.hidden && draft.textContent ? [`${row.querySelector('h3')?.textContent}: ${draft.textContent}`] : [];
+    });
+    return [
+      `Diagnosis: ${diagnosis.name}`,
+      `Sim date: Not modeled · Sim time: ${simTime}`,
+      `Interventions given:\n${given.length ? given.join('\n') : 'None recorded'}`,
+      `Admission vitals (t=0): ${formatVitals(admission)}`,
+      `Current vitals: ${formatVitals(vitals)}`,
+      `Progress: ${document.getElementById('sicu-progress')?.textContent || 'Not modeled'}`,
+      `Current assessment lines:\n${assessmentLines.length ? assessmentLines.join('\n') : 'None'}`
+    ].join('\n\n');
+  }
+  function renderReport() { reportContent.textContent = reportText(); }
   document.getElementById('sicu-copy-summary').addEventListener('click', async () => {
     const text = summaryText();
     try {
@@ -592,8 +653,26 @@ body.sicu-present>header,body.sicu-present .help,body.sicu-present .tag,body.sic
       copyStatus.textContent = 'Summary copied.';
     } catch (_) { copyStatus.textContent = 'Clipboard access unavailable.'; }
   });
+  reportToggle.addEventListener('click', () => {
+    const open = reportPanel.style.display !== 'block';
+    reportPanel.style.display = open ? 'block' : 'none';
+    reportToggle.setAttribute('aria-expanded',String(open));
+    if (open) renderReport();
+  });
+  document.getElementById('sicu-copy-report').addEventListener('click', async () => {
+    const text = reportText();
+    try {
+      if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(text);
+      else {
+        const temp = document.createElement('textarea'); temp.value = text; temp.style.position = 'fixed'; temp.style.opacity = '0'; document.body.appendChild(temp); temp.select();
+        const copied = document.execCommand('copy'); temp.remove();
+        if (!copied) throw new Error('Clipboard copy unavailable');
+      }
+      reportStatus.textContent = 'Report copied.';
+    } catch (_) { reportStatus.textContent = 'Clipboard access unavailable.'; }
+  });
   render();
-  requestAnimationFrame(function tick(){render();requestAnimationFrame(tick);});
+  requestAnimationFrame(function tick(){render();if(reportPanel.style.display==='block')renderReport();requestAnimationFrame(tick);});
 })();
 </script>
 </body>
