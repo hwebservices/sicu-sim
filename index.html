@@ -75,6 +75,8 @@ try {
 </div>
 <aside id="sicu-interventions" aria-label="Interventions" style="display:none;position:fixed;left:18px;bottom:24px;z-index:5;width:min(340px,calc(100vw - 36px));max-height:48vh;overflow:auto;padding:13px 15px;background:#fffffff2;border:1px solid #e0e2dc;border-radius:12px;box-shadow:0 4px 22px #20231e16">
   <div style="font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:#686b68;margin-bottom:8px">Interventions</div>
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;font-size:10px;color:#555b55"><label for="sicu-diagnosis-select">Diagnosis</label><select id="sicu-diagnosis-select" aria-label="Diagnosis" style="max-width:76%;padding:5px 7px;border:1px solid #d9ddd6;border-radius:6px;background:#fff;color:#343a36;font:11px Arial,sans-serif"></select></div>
+  <div style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#747871;margin-bottom:8px">Progress: <strong id="sicu-progress" aria-live="polite" style="color:#59625a">On track</strong></div>
   <div id="sicu-scenario-label" style="font-size:11px;font-weight:600;color:#8b4d28;margin-bottom:10px">DRAFT — clinical review required · Post-op septic shock (DRAFT)</div>
   <div class="sicu-group"><div>MEDS</div><button type="button" data-intervention="Norepinephrine infusion">Norepinephrine infusion</button><button type="button" data-intervention="Vancomycin IV">Vancomycin IV</button><button type="button" data-intervention="Insulin infusion">Insulin infusion</button><button type="button" data-intervention="Propofol sedation">Propofol sedation</button></div>
   <div class="sicu-group"><div>FLUIDS</div><button type="button" data-intervention="NS 500mL bolus">NS 500mL bolus</button><button type="button" data-intervention="LR 500mL bolus">LR 500mL bolus</button></div>
@@ -111,11 +113,32 @@ try {
     const interventionPanel = document.getElementById('sicu-interventions');
     const eventPanel = document.getElementById('sicu-event-panel');
     const eventList = document.getElementById('sicu-event-list');
-    const scenario = {name:'Post-op septic shock (DRAFT)', events:[
-      {tMin:0,set:{temp:38.9,hr:108,nibpSys:92,nibpDia:58,rr:22,spo2:94},note:'Fever spike, hypotensive'},
-      {tMin:30,set:{temp:39.2,hr:115},note:'Fever persists without antibiotics'},
-      {tMin:60,set:{nibpSys:84,nibpDia:52,hr:122},note:'Deteriorating without resuscitation'}
-    ]};
+    const diagnosisSelect = document.getElementById('sicu-diagnosis-select');
+    const progressLabel = document.getElementById('sicu-progress');
+    const scenarioLabel = document.getElementById('sicu-scenario-label');
+    const DIAGNOSES = {
+      septicShock:{id:'septicShock',name:'Post-op septic shock (DRAFT)',events:[
+        {tMin:0,set:{temp:38.9,hr:108,nibpSys:92,nibpDia:58,rr:22,spo2:94},note:'Fever spike, hypotensive'},
+        {tMin:30,set:{temp:39.2,hr:115},note:'Fever persists without antibiotics'},
+        {tMin:60,set:{nibpSys:84,nibpDia:52,hr:122},note:'Deteriorating without resuscitation'}
+      ],targets:{nibpSys:[90,120],hr:[60,100],temp:[36.5,37.5],spo2:[94,100]}},
+      ards:{id:'ards',name:'ARDS (DRAFT)',events:[
+        {tMin:0,set:{spo2:88,rr:28,hr:104,temp:37.6,nibpSys:118,nibpDia:74,glucose:142},note:'Hypoxemic respiratory failure'},
+        {tMin:30,set:{spo2:85},note:'Deteriorating without increased FiO2/PEEP'},
+        {tMin:60,set:{rr:32,spo2:83},note:'Severe hypoxemia'}
+      ],targets:{spo2:[92,98],rr:[12,20]}},
+      cardiogenicShock:{id:'cardiogenicShock',name:'Cardiogenic shock (DRAFT)',events:[
+        {tMin:0,set:{nibpSys:82,nibpDia:50,hr:118,spo2:90,rr:24,temp:36.8,glucose:160},note:'Pump failure, hypotensive'},
+        {tMin:30,set:{nibpSys:78},note:'Worsening hypotension'},
+        {tMin:60,set:{hr:126,spo2:88},note:'Pulmonary edema worsening'}
+      ],targets:{nibpSys:[90,120],hr:[60,100],spo2:[94,100]}},
+      dka:{id:'dka',name:'DKA (DRAFT)',events:[
+        {tMin:0,set:{glucose:420,hr:110,rr:24,temp:37.2,nibpSys:104,nibpDia:66,spo2:97},note:'Hyperglycemic, Kussmaul breathing'},
+        {tMin:60,set:{glucose:380},note:'Still hyperglycemic without insulin'},
+        {tMin:120,set:{glucose:340},note:'Slow improvement with fluids alone'}
+      ],targets:{glucose:[100,180],hr:[60,100]}}
+    };
+    let scenario = DIAGNOSES.septicShock;
     const interventionDefinitions = {
       'Norepinephrine infusion':{delta:{nibpSys:18,nibpDia:12,hr:8},onsetMin:5,peakMin:15,durationMin:120},
       'NS 500mL bolus':{delta:{nibpSys:8,nibpDia:5,hr:-4},onsetMin:10,peakMin:20,durationMin:90},
@@ -157,6 +180,7 @@ try {
       Object.assign(phase1Vitals, vitals);
       clock.simMinutes = simSeconds / 60;
       applyModelOutput();
+      updateProgress();
     }
     function timestamp(minutes = clock.simMinutes) {
       const total = Math.max(0, Math.floor(minutes));
@@ -218,9 +242,20 @@ try {
       // Single integration point: Phase 1 drift + scenario offset + summed intervention deltas.
       for (const [key, delta] of Object.entries(totals)) {
         const low = key === 'glucose' ? 70 : -Infinity;
-        const high = key === 'glucose' ? 300 : Infinity;
+        const high = key === 'glucose' ? Math.max(300, ...scenario.events.map(event => event.set.glucose || 0)) : Infinity;
         vitals[key] = Math.min(high, Math.max(low, (phase1Vitals[key] ?? 0) + delta));
       }
+    }
+    function updateProgress() {
+      const admission = scenario.events.find(event => event.tMin === 0)?.set || {};
+      let allWithinTargets = true, worseningSideCount = 0;
+      for (const [key, range] of Object.entries(scenario.targets)) {
+        const [low, high] = range, value = vitals[key], admissionValue = admission[key];
+        const within = value >= low && value <= high;
+        if (!within) allWithinTargets = false;
+        if ((admissionValue < low && value < low) || (admissionValue > high && value > high)) worseningSideCount++;
+      }
+      progressLabel.textContent = allWithinTargets ? 'Improving' : worseningSideCount >= 2 ? 'Deteriorating' : 'On track';
     }
     function intervene(name) {
       const definition = interventionDefinitions[name];
@@ -229,6 +264,44 @@ try {
       interventions.push({name, definition, startMin:clock.simMinutes});
       addLog(name);
       applyModelOutput();
+      draw();
+    }
+    function setDiagnosis(id) {
+      const next = DIAGNOSES[id];
+      if (!next) throw new RangeError(`Unknown diagnosis: ${id}`);
+      if (next.id === scenario.id) return;
+      advance(performance.now());
+      scenario = next;
+      api.diagnosis = scenario;
+      api.scenario = scenario;
+      diagnosisSelect.value = scenario.id;
+      scenarioLabel.textContent = `DRAFT — clinical review required · ${scenario.name}`;
+      Object.assign(phase1Vitals, phase1Baselines);
+      Object.assign(vitals, phase1Baselines);
+      for (const state of [scenarioDriftCenterOffsets, scenarioOffsets, scenarioTweens]) {
+        for (const key of Object.keys(state)) delete state[key];
+      }
+      interventions.length = 0;
+      clock.simMinutes = 0;
+      simSeconds = 0;
+      sampleIndex = 0;
+      lastWallTime = performance.now();
+      eventList.replaceChildren();
+      const admissionIndex = scenario.events.findIndex(event => event.tMin === 0);
+      if (admissionIndex < 0) throw new Error(`Diagnosis ${id} has no tMin:0 admission event.`);
+      const admission = scenario.events[admissionIndex];
+      for (const [key, value] of Object.entries(admission.set)) {
+        phase1Vitals[key] = value;
+        scenarioDriftCenterOffsets[key] = value - phase1Baselines[key];
+        scenarioOffsets[key] = 0;
+        vitals[key] = value;
+      }
+      nextScenarioEvent = scenario.events.findIndex(event => event.tMin > 0);
+      if (nextScenarioEvent < 0) nextScenarioEvent = scenario.events.length;
+      addLog(`Switched diagnosis: ${scenario.name}`, 0);
+      addLog(`${scenario.name} · ${admission.note}`, 0);
+      applyModelOutput();
+      updateProgress();
       draw();
     }
     function ecg(p) {
@@ -279,8 +352,16 @@ try {
       clock.paused = false;
       syncButtons();
     }
-    // Only add the five Phase 1 members. Existing scene, controls, objects and functions retain identity.
-    Object.assign(api, {vitals, clock, setSpeed, pause, resume, intervene, scenario});
+    // Extend the existing API without replacing the room scene, controls or objects.
+    Object.assign(api, {vitals, clock, setSpeed, pause, resume, intervene, scenario, diagnosis:scenario, setDiagnosis});
+    for (const diagnosis of Object.values(DIAGNOSES)) {
+      const option = document.createElement('option');
+      option.value = diagnosis.id;
+      option.textContent = diagnosis.name;
+      diagnosisSelect.appendChild(option);
+    }
+    diagnosisSelect.value = scenario.id;
+    diagnosisSelect.addEventListener('change', () => setDiagnosis(diagnosisSelect.value));
     document.querySelectorAll('[data-intervention]').forEach(button => button.addEventListener('click', () => intervene(button.dataset.intervention)));
     const eventToggle = document.getElementById('sicu-event-toggle');
     eventToggle.addEventListener('click', () => {
@@ -342,6 +423,7 @@ try {
     clockPanel.style.display = 'flex'; monitorPanel.style.display = 'block';
     interventionPanel.style.display = 'block'; eventPanel.style.display = 'block';
     applyModelOutput();
+    updateProgress();
     resizeCanvas(); syncButtons();
     window.addEventListener('resize', resizeCanvas);
     function frame(now) {advance(now); draw(); requestAnimationFrame(frame);}
