@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<!-- assets/ventilator.glb by lazarys, licensed CC-BY 4.0. -->
 <title>SICU · Clinical room</title>
 <style>
 :root{font-family:Inter,Arial,sans-serif;color:#292b2b;background:#dddcd7;color-scheme:light}*{box-sizing:border-box}body{margin:0;overflow:hidden}canvas{display:block;touch-action:none}header{position:fixed;left:28px;top:25px;z-index:2;pointer-events:none}h1{font-size:19px;font-weight:550;letter-spacing:.02em;margin:0}header p{font-size:11px;color:#686b68;margin:7px 0;letter-spacing:.12em;text-transform:uppercase}.number{display:inline-block;border-right:1px solid #9e9f9877;padding-right:13px;margin-right:13px;color:#70736d;font-weight:400}.toolbar{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);display:flex;gap:3px;padding:5px;background:#fffffff2;border:1px solid #ffffff;border-radius:12px;box-shadow:0 4px 24px #20231e12;z-index:3;white-space:nowrap}button{border:0;background:transparent;color:#5d615c;border-radius:8px;padding:10px 14px;font:12px Arial,sans-serif;cursor:pointer}button:hover,button:focus-visible{background:#e9eae5;color:#222;outline:0}button.active{background:#343a36;color:#fff}.separator{width:1px;background:#dfe1dc;margin:8px 4px}.help{position:fixed;right:28px;top:28px;font-size:11px;color:#6b7069;line-height:1.8;text-align:right;z-index:2}.tag{position:fixed;left:28px;bottom:34px;font-size:10px;letter-spacing:.13em;color:#797d76;text-transform:uppercase;pointer-events:none}#loading{position:fixed;inset:0;display:flex;flex-direction:column;gap:13px;align-items:center;justify-content:center;background:#e8e7e2;z-index:9;font-size:13px;color:#626861}#loading b{font-size:22px;letter-spacing:.08em;color:#343b35;font-weight:400}#loading.hidden{display:none}#error{max-width:500px;padding:20px;line-height:1.7;text-align:center}noscript{position:fixed;inset:35%;z-index:20;background:white;padding:25px} @media(max-width:700px){header{top:18px;left:18px}header p{font-size:9px}.help{right:16px;top:19px;font-size:9px}.tag{display:none}.toolbar{bottom:16px}button{padding:10px 9px;font-size:11px}}@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto}}
@@ -40,7 +41,7 @@ try {
  const removed=[];root.traverse(o=>{if(o.isLight||o.isCamera)removed.push(o);});removed.forEach(o=>o.removeFromParent());
  function noiseTexture(size,kind){const c=document.createElement('canvas');c.width=c.height=size;const ctx=c.getContext('2d');const d=ctx.createImageData(size,size);let seed=19243;function rnd(){seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296;}for(let y=0;y<size;y++)for(let x=0;x<size;x++){const i=(y*size+x)*4;let v=128+(rnd()-.5)*(kind==='cloth'?30:20);if(kind==='cloth')v+=(x%3===0?12:0)+(y%3===0?12:0);d.data[i]=d.data[i+1]=d.data[i+2]=v;d.data[i+3]=255;}ctx.putImageData(d,0,0);const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(kind==='cloth'?4:6,kind==='cloth'?4:6);t.anisotropy=renderer.capabilities.getMaxAnisotropy();return t;}
  const fabricNoise=noiseTexture(256,'cloth'),fineNoise=noiseTexture(256,'fine');const mats=new Set();
- root.traverse(o=>{if(!o.isMesh)return;o.castShadow=true;o.receiveShadow=true;const arr=Array.isArray(o.material)?o.material:[o.material];for(const m of arr){if(mats.has(m))continue;mats.add(m);if(/cotton|Linen|blanket/i.test(m.name)){m.bumpMap=fabricNoise;m.bumpScale=.0014;m.roughness=.94;}if(/skin/i.test(m.name)){m.bumpMap=fineNoise;m.bumpScale=.00065;m.roughness=.56;}if(/vinyl/i.test(m.name)){m.bumpMap=fineNoise;m.bumpScale=.001;m.roughness=.4;m.metalness=.06;}if(/plaster/i.test(m.name)){m.bumpMap=fineNoise;m.bumpScale=.0005;}if(/Transparent|Saline/i.test(m.name)){m.transparent=true;m.opacity=.27;m.depthWrite=false;m.side=THREE.DoubleSide;}m.needsUpdate=true;}});
+ root.traverse(o=>{if(!o.isMesh)return;o.castShadow=true;o.receiveShadow=true;const arr=Array.isArray(o.material)?o.material:[o.material];for(const m of arr){if(mats.has(m))continue;mats.add(m);if(/cotton|Linen|blanket/i.test(m.name)){m.bumpMap=fabricNoise;m.bumpScale=.0014;m.roughness=.94;}if(/skin/i.test(m.name)){m.bumpMap=fineNoise;m.bumpScale=.00065;m.roughness=.62;m.color.multiply(new THREE.Color('#fff8f0'));}if(/Pale blue gray cotton gown/i.test(m.name))m.roughness=.97;if(/vinyl/i.test(m.name)){m.bumpMap=fineNoise;m.bumpScale=.001;m.roughness=.4;m.metalness=.06;}if(/plaster/i.test(m.name)){m.bumpMap=fineNoise;m.bumpScale=.0005;}if(/Transparent|Saline/i.test(m.name)){m.transparent=true;m.opacity=.27;m.depthWrite=false;m.side=THREE.DoubleSide;}m.needsUpdate=true;}});
  const hemi=new THREE.HemisphereLight(0xf8f7ef,0x8f9087,.92);hemi.name='clinicalAmbient';scene.add(hemi);
  const key=new THREE.DirectionalLight(0xfff7e9,1.65);key.name='ceilingSoftKey';key.position.set(1.8,5.2,1.2);key.target.position.set(0,.6,-.5);key.castShadow=true;key.shadow.mapSize.set(2048,2048);Object.assign(key.shadow.camera,{left:-3.6,right:3.6,top:3.6,bottom:-3.6,near:.1,far:12});key.shadow.bias=-.00015;key.shadow.normalBias=.012;key.shadow.radius=5;key.shadow.blurSamples=12;scene.add(key,key.target);
  const daylight=new THREE.PointLight(0xf2f6ff,12,7,2);daylight.name='windowDaylight';daylight.position.set(2.1,2.1,0);scene.add(daylight);
@@ -53,6 +54,7 @@ try {
  let rendering=false;
  function constrain(){controls.target.x=THREE.MathUtils.clamp(controls.target.x,-1.6,1.6);controls.target.y=THREE.MathUtils.clamp(controls.target.y,.35,1.95);controls.target.z=THREE.MathUtils.clamp(controls.target.z,-1.65,1);camera.position.x=THREE.MathUtils.clamp(camera.position.x,-2.28,2.28);camera.position.y=THREE.MathUtils.clamp(camera.position.y,.3,5.2);camera.position.z=Math.max(camera.position.z,-1.65);if(camera.position.z<2.15)camera.position.y=Math.min(camera.position.y,2.68);camera.lookAt(controls.target);}
  function render(){if(rendering)return;rendering=true;constrain();composer.render();rendering=false;}
+ new GLTFLoader().loadAsync('assets/ventilator.glb').then(({scene:unit})=>{unit.name='ventilatorUnit';unit.position.set(1.86,0,-1.25);scene.add(unit);objects.ventilatorUnit=unit;render();}).catch(error=>console.warn('Unable to load assets/ventilator.glb; leaving the ventilator staging area empty.',error));
  function setView(name){const v=views[name];camera.position.fromArray(v.position);controls.target.fromArray(v.target);controls.update();render();document.querySelectorAll('[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===name));}
  controls.addEventListener('change',render);document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>setView(b.dataset.view));document.getElementById('reset').onclick=()=>setView('room');document.getElementById('fullscreen').onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen();}catch(e){console.warn(e);}};
  document.addEventListener('keydown',e=>{if(e.key.toLowerCase()==='r')setView('room');});
@@ -98,6 +100,8 @@ try {
     const api = window.sicu;
     const vitals = {hr:72, spo2:98, nibpSys:118, nibpDia:76, rr:16, temp:37.1, glucose:142};
     const phase1Vitals = {...vitals};
+    const phase1Baselines = {...vitals};
+    const scenarioDriftCenterOffsets = {};
     const clock = {simMinutes:0, speed:1, paused:false};
     const clockPanel = document.getElementById('sicu-clock');
     const timeLabel = document.getElementById('sicu-time');
@@ -139,7 +143,8 @@ try {
       return seed / 4294967296;
     }
     function walk(key, step, low, high) {
-      vitals[key] = Math.min(high, Math.max(low, vitals[key] + (random() * 2 - 1) * step));
+      const centerOffset = scenarioDriftCenterOffsets[key] || 0;
+      vitals[key] = Math.min(high + centerOffset, Math.max(low + centerOffset, vitals[key] + (random() * 2 - 1) * step));
     }
     function updateVitals() {
       // Restore the raw Phase 1 output before running its unchanged seeded drift steps.
@@ -174,7 +179,7 @@ try {
         const event = scenario.events[nextScenarioEvent++];
         for (const [key, target] of Object.entries(event.set)) {
           const from = scenarioOffsetAt(key, event.tMin);
-          scenarioTweens[key] = {from, to:target - phase1Vitals[key], start:event.tMin, end:event.tMin + 5};
+          scenarioTweens[key] = {from, to:target - phase1Vitals[key], target, start:event.tMin, end:event.tMin + 5};
         }
         addLog(`${scenario.name} · ${event.note}`, event.tMin);
       }
@@ -194,9 +199,17 @@ try {
       const totals = {};
       for (const [key, tween] of Object.entries(scenarioTweens)) {
         const offset = scenarioOffsetAt(key, minutes);
-        scenarioOffsets[key] = offset;
-        if (minutes >= tween.end) delete scenarioTweens[key];
-        totals[key] = offset;
+        if (minutes >= tween.end) {
+          // Commit the scenario target as the new drift center, then clear its tween offset.
+          phase1Vitals[key] = tween.target;
+          scenarioDriftCenterOffsets[key] = tween.target - phase1Baselines[key];
+          scenarioOffsets[key] = 0;
+          delete scenarioTweens[key];
+          totals[key] = 0;
+        } else {
+          scenarioOffsets[key] = offset;
+          totals[key] = offset;
+        }
       }
       for (const entry of interventions) {
         const weight = effectAt(entry, minutes);
