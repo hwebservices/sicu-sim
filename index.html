@@ -337,5 +337,153 @@ try {
   attachMonitor();
 })();
 </script>
+<!-- Phase 3: presentation-only assessment and plan; Phase 1/2 simulation behavior is unchanged. -->
+<button id="sicu-assessment-toggle" type="button" aria-expanded="false" aria-controls="sicu-assessment-panel" style="position:fixed;left:28px;top:126px;z-index:7;padding:9px 13px;background:#fffffff2;border:1px solid #e0e2dc;box-shadow:0 3px 14px #20231e12">Assessment</button>
+<button id="sicu-present-toggle" type="button" aria-pressed="false" style="position:fixed;right:190px;top:20px;z-index:7;padding:9px 13px;background:#fffffff2;border:1px solid #e0e2dc;box-shadow:0 3px 14px #20231e12">Present</button>
+<section id="sicu-assessment-panel" aria-label="Assessment and plan" style="display:none;position:fixed;left:18px;top:174px;bottom:22px;z-index:6;width:min(470px,calc(100vw - 36px));overflow:auto;padding:18px;background:#fffffff5;border:1px solid #dfe2db;border-radius:13px;box-shadow:0 6px 28px #20231e1a">
+  <header style="position:static;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;pointer-events:auto;margin-bottom:12px">
+    <div><h2 style="font-size:17px;font-weight:550;margin:0">Patient assessment</h2><p style="font-size:10px;letter-spacing:.11em;text-transform:uppercase;color:#98582e;margin:5px 0 0">DRAFT — clinical review required · Not clinically validated</p></div>
+    <button type="button" id="sicu-copy-summary" style="border:1px solid #d9ddd6;background:#f7f8f5;padding:8px 10px;white-space:nowrap">Copy summary</button>
+  </header>
+  <div id="sicu-assessment-rows"></div>
+  <div id="sicu-copy-status" role="status" aria-live="polite" style="font:11px ui-monospace,monospace;color:#59625a;margin-top:8px"></div>
+</section>
+<style>
+#sicu-assessment-rows{display:flex;flex-direction:column;gap:7px}.sicu-assessment-row{border-top:1px solid #e5e7e2;padding:9px 0 3px}.sicu-assessment-row h3{font-size:12px;font-weight:600;margin:0 0 5px;color:#303732}.sicu-assessment-values,.sicu-assessment-draft,.sicu-assessment-unmodeled{font-size:11px;line-height:1.5;margin:3px 0;color:#515750}.sicu-assessment-draft{font-weight:550;color:#89522d}.sicu-assessment-plan{display:block;width:100%;min-height:42px;resize:vertical;margin:6px 0 0;padding:7px 8px;border:1px solid #d9ddd6;border-radius:7px;background:#fff;color:#292b2b;font:11px/1.45 Arial,sans-serif}.sicu-assessment-plan::placeholder{color:#8a8e88}
+body.sicu-present>header,body.sicu-present .help,body.sicu-present .tag,body.sicu-present .toolbar,body.sicu-present #sicu-clock{display:none!important}body.sicu-present #sicu-assessment-toggle{display:none!important}body.sicu-present #sicu-present-toggle{right:20px;top:16px;background:#fff;box-shadow:0 3px 18px #0002}body.sicu-present #sicu-interventions,body.sicu-present #sicu-event-panel{display:none!important}body.sicu-present #sicu-assessment-panel{display:block!important;inset:10px!important;width:auto!important;bottom:10px!important;max-height:none!important;border-radius:8px;padding:20px 24px 28px 24px;z-index:10}body.sicu-present #sicu-monitor{display:block!important;width:min(510px,44vw)!important;right:22px!important;bottom:22px!important;z-index:12;border-width:6px!important;box-shadow:0 12px 34px #0004!important}
+@media(max-width:700px){#sicu-assessment-toggle{left:10px!important;top:112px!important}#sicu-present-toggle{right:12px!important;top:12px!important}#sicu-assessment-panel{left:8px!important;top:158px!important;bottom:8px!important;width:calc(100vw - 16px)!important}.sicu-present #sicu-assessment-panel{inset:6px!important;padding:16px!important}.sicu-present #sicu-monitor{width:min(360px,70vw)!important;right:10px!important;bottom:10px!important}}
+</style>
+<script>
+(() => {
+  'use strict';
+  const toggle = document.getElementById('sicu-assessment-toggle');
+  const present = document.getElementById('sicu-present-toggle');
+  const panel = document.getElementById('sicu-assessment-panel');
+  const rowsRoot = document.getElementById('sicu-assessment-rows');
+  const copyStatus = document.getElementById('sicu-copy-status');
+  let assessmentWasOpen = false;
+  const systems = [
+    {name:'Cardiovascular', keys:['hr','nibpSys','nibpDia']},
+    {name:'Respiratory', keys:['spo2','rr']},
+    {name:'GI', keys:[]},
+    {name:'GU/Renal', keys:[]},
+    {name:'Infectious Disease', keys:['temp']},
+    {name:'Endocrine', keys:['glucose']},
+    {name:'Hematology', keys:[]},
+    {name:'Neuro', keys:[]},
+    {name:'Lines/Tubes/Drains', keys:[]}
+  ];
+  const rowElements = new Map();
+  for (const system of systems) {
+    const row = document.createElement('section');
+    row.className = 'sicu-assessment-row';
+    const title = document.createElement('h3'); title.textContent = system.name;
+    const values = document.createElement('p'); values.className = 'sicu-assessment-values';
+    const draft = document.createElement('p'); draft.className = 'sicu-assessment-draft'; draft.hidden = true;
+    const unmodeled = document.createElement('p'); unmodeled.className = 'sicu-assessment-unmodeled'; unmodeled.hidden = true;
+    unmodeled.textContent = 'not yet modeled';
+    const plan = document.createElement('textarea'); plan.className = 'sicu-assessment-plan'; plan.setAttribute('aria-label', `${system.name} plan notes`); plan.setAttribute('spellcheck','true');
+    row.append(title,values,draft,unmodeled,plan); rowsRoot.appendChild(row);
+    rowElements.set(system.name,{values,draft,unmodeled,plan});
+  }
+  function eventMessages() {
+    return [...document.querySelectorAll('#sicu-event-list li')].map(item => item.textContent.trim());
+  }
+  function activeTreatment(name, duration) {
+    const api = window.sicu;
+    if (!api?.clock) return false;
+    const prefix = `  ${name}`;
+    for (const line of eventMessages().reverse()) {
+      if (!line.endsWith(prefix)) continue;
+      const stamp = line.slice(0,line.indexOf('  '));
+      const [hours,minutes] = stamp.split(':').map(Number);
+      if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return false;
+      const elapsed = api.clock.simMinutes - (hours * 60 + minutes);
+      return elapsed >= 0 && elapsed < duration;
+    }
+    return false;
+  }
+  function currentState() {
+    const v = window.sicu?.vitals;
+    if (!v) return null;
+    const map = v.nibpDia + (v.nibpSys - v.nibpDia) / 3;
+    const pressor = activeTreatment('Norepinephrine infusion',120);
+    const insulin = activeTreatment('Insulin infusion',180);
+    const log = eventMessages();
+    const antibiotic = log.some(line => line.endsWith('  Vancomycin IV')) ? 'Vancomycin IV' : 'None recorded';
+    const assessments = {
+      'Cardiovascular':[...(map < 65 ? ['Hypotensive'] : []),...(v.hr > 100 ? ['tachycardic'] : []),...(pressor ? ['on vasopressor support'] : [])],
+      'Respiratory':[...(v.spo2 < 94 ? ['hypoxemic'] : []),...(v.rr > 20 ? ['tachypneic'] : [])],
+      'Infectious Disease':v.temp >= 38 ? ['febrile'] : [],
+      'Endocrine':[...(v.glucose > 180 ? ['hyperglycemic'] : []),...(v.glucose < 70 ? ['hypoglycemic'] : [])]
+    };
+    return {v,map,pressor,insulin,antibiotic,log,assessments};
+  }
+  function render() {
+    const state = currentState();
+    if (!state) { requestAnimationFrame(render); return; }
+    const {v,map,pressor,insulin,antibiotic,assessments} = state;
+    const content = {
+      'Cardiovascular':`HR ${Math.round(v.hr)} bpm · NIBP ${Math.round(v.nibpSys)}/${Math.round(v.nibpDia)} mmHg · MAP ${map.toFixed(1)} mmHg · Pressor active: ${pressor ? 'Yes' : 'No'}`,
+      'Respiratory':`SpO₂ ${Math.round(v.spo2)}% · RR ${Math.round(v.rr)}/min · FiO₂: not yet modeled · PEEP: not yet modeled`,
+      'Infectious Disease':`Temp ${v.temp.toFixed(1)} °C · Antibiotics given: ${antibiotic}`,
+      'Endocrine':`Glucose ${Math.round(v.glucose)} mg/dL · Insulin active: ${insulin ? 'Yes' : 'No'}`
+    };
+    for (const system of systems) {
+      const elements = rowElements.get(system.name);
+      const modeled = content[system.name];
+      elements.values.textContent = modeled || '';
+      elements.values.hidden = !modeled;
+      elements.unmodeled.hidden = Boolean(modeled);
+      const lines = state.assessments[system.name] || [];
+      elements.draft.textContent = lines.length ? `DRAFT: ${lines.join('; ')}` : '';
+      elements.draft.hidden = !lines.length;
+    }
+  }
+  toggle.addEventListener('click', () => {
+    const open = panel.style.display !== 'block';
+    panel.style.display = open ? 'block' : 'none';
+    toggle.setAttribute('aria-expanded',String(open));
+  });
+  present.addEventListener('click', () => {
+    const enabled = !document.body.classList.contains('sicu-present');
+    document.body.classList.toggle('sicu-present',enabled);
+    present.setAttribute('aria-pressed',String(enabled));
+    if (enabled) {
+      assessmentWasOpen = panel.style.display === 'block';
+      panel.style.display = 'block';
+      toggle.setAttribute('aria-expanded','true');
+    } else {
+      panel.style.display = assessmentWasOpen ? 'block' : 'none';
+      toggle.setAttribute('aria-expanded',String(assessmentWasOpen));
+    }
+  });
+  function summaryText() {
+    const state = currentState();
+    if (!state) return '';
+    return systems.map(system => {
+      const elements = rowElements.get(system.name);
+      const values = elements.values.hidden ? elements.unmodeled.textContent : elements.values.textContent;
+      const assessment = elements.draft.hidden ? '' : elements.draft.textContent;
+      return [system.name,values,assessment,`Plan: ${elements.plan.value}`].filter(Boolean).join('\n');
+    }).join('\n\n') + '\n\nEvent log\n' + (state.log.length ? state.log.join('\n') : 'No events recorded');
+  }
+  document.getElementById('sicu-copy-summary').addEventListener('click', async () => {
+    const text = summaryText();
+    try {
+      if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(text);
+      else {
+        const temp = document.createElement('textarea'); temp.value = text; temp.style.position = 'fixed'; temp.style.opacity = '0'; document.body.appendChild(temp); temp.select();
+        const copied = document.execCommand('copy');
+        temp.remove();
+        if (!copied) throw new Error('Clipboard copy unavailable');
+      }
+      copyStatus.textContent = 'Summary copied.';
+    } catch (_) { copyStatus.textContent = 'Clipboard access unavailable.'; }
+  });
+  render();
+  requestAnimationFrame(function tick(){render();requestAnimationFrame(tick);});
+})();
+</script>
 </body>
 </html>
