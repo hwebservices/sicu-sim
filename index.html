@@ -50,8 +50,59 @@ try {
  const reflection=new Reflector(new THREE.PlaneGeometry(4.97,3.97),{textureWidth:768,textureHeight:768,color:0xc8c5bc,clipBias:.003});reflection.name='floorReflection';reflection.rotation.x=-Math.PI/2;reflection.position.y=.003;reflection.material.transparent=true;reflection.material.depthWrite=false;reflection.material.fragmentShader=reflection.material.fragmentShader.replace('#include <tonemapping_fragment>','gl_FragColor.a = 0.055;\n#include <tonemapping_fragment>');scene.add(reflection);
  const composer=new EffectComposer(renderer);composer.renderTarget1.samples=4;composer.renderTarget2.samples=4;composer.addPass(new RenderPass(scene,camera));const ao=new SSAOPass(scene,camera,innerWidth,innerHeight);ao.kernelRadius=9;ao.minDistance=.002;ao.maxDistance=.14;composer.addPass(ao);composer.addPass(new OutputPass());
  const majorNames=['bed','patient','ventilator','monitor','ivPump1','ivPump2','headwallUnit','suctionRegulator','crashCart','bedsideTable','overbedTable','stool','door','handSanitizer','whiteboard','wallClock','wallHandrail','window','ceilingPanels'];const objects={};for(const name of majorNames)objects[name]=root.getObjectByName(name);
- const patientSkinColors=new Map();const cyanoticSkinColor=new THREE.Color('#7892a3');objects.patient?.traverse(o=>{if(!o.isMesh)return;const arr=Array.isArray(o.material)?o.material:[o.material];for(const m of arr)if(m?.color&&/skin/i.test(m.name)&&!patientSkinColors.has(m))patientSkinColors.set(m,m.color.clone());});
- function setCyanosis(spo2){const strength=THREE.MathUtils.clamp((92-spo2)/20,0,1);for(const [material,baseColor] of patientSkinColors)material.color.copy(baseColor).lerp(cyanoticSkinColor,strength);render();}
+  const patientSkinColors=new Map();const cyanoticSkinColor=new THREE.Color('#7892a3');objects.patient?.traverse(o=>{if(!o.isMesh)return;const arr=Array.isArray(o.material)?o.material:[o.material];for(const m of arr)if(m?.color&&/skin/i.test(m.name)&&!patientSkinColors.has(m))patientSkinColors.set(m,m.color.clone());});
+  function setCyanosis(spo2){const strength=THREE.MathUtils.clamp((92-spo2)/20,0,1);for(const [material,baseColor] of patientSkinColors)material.color.copy(baseColor).lerp(cyanoticSkinColor,strength);render();}
+  const chest=objects.patient?.getObjectByName('Gown_torso');const chestScale=chest?.scale.clone();let breathingPhase=0,lastBreathingRender=0;
+  const simulationState={patient:{vitals:null,breathing:{rate:16,phase:0}},devices:{oxygen:{type:'off',label:'Off',active:false,connected:false}},support:{oxygen:false},attachments:{oxygen:null},audio:{muted:false,volume:.22,available:typeof (window.AudioContext||window.webkitAudioContext)==='function'}};
+  const oxygenRig=new THREE.Group();oxygenRig.name='oxygenAttachment';scene.add(oxygenRig);
+  const oxygenTubeMaterial=new THREE.MeshPhysicalMaterial({color:'#c5dce1',roughness:.32,metalness:.02,clearcoat:.55,transparent:true,opacity:.9});
+  const oxygenSiliconeMaterial=new THREE.MeshPhysicalMaterial({color:'#cbdde0',roughness:.36,metalness:0,clearcoat:.5,transparent:true,opacity:.9});
+  const oxygenMaskMaterial=new THREE.MeshPhysicalMaterial({color:'#d9e8e9',roughness:.24,metalness:0,clearcoat:.7,transparent:true,opacity:.42,depthWrite:false,side:THREE.DoubleSide});
+  const oxygenMetalMaterial=new THREE.MeshStandardMaterial({color:'#c4c8c8',metalness:.78,roughness:.24});
+  const wallOutletPosition=new THREE.Vector3(-.76,1.6,-1.825);
+  const outletConnector=new THREE.Mesh(new THREE.CylinderGeometry(.012,.012,.035,16),oxygenMetalMaterial);outletConnector.name='oxygenOutletAdapter';outletConnector.rotation.x=Math.PI/2;outletConnector.position.set(-.76,1.6,-1.81);scene.add(outletConnector);
+  const sourceLightMaterial=new THREE.MeshStandardMaterial({color:'#2d5e62',emissive:'#102b2d',emissiveIntensity:.2,metalness:.35,roughness:.35});
+  const sourceLight=new THREE.Mesh(new THREE.SphereGeometry(.008,12,8),sourceLightMaterial);sourceLight.name='oxygenFlowIndicator';sourceLight.position.set(-.76,1.6,-1.785);scene.add(sourceLight);
+  const deviceLabels={off:'Off','nasal-cannula':'Nasal cannula','simple-mask':'Simple face mask','non-rebreather':'Non-rebreather mask'};
+  // Tube coordinates follow the current stationary bed/mannequin pose; they are not reusable attachment anchors.
+  function addOxygenTube(points,radius,material,name){const curve=new THREE.CatmullRomCurve3(points.map(p=>new THREE.Vector3(...p)));const mesh=new THREE.Mesh(new THREE.TubeGeometry(curve,48,radius,8,false),material);mesh.name=name;mesh.castShadow=true;mesh.receiveShadow=true;oxygenRig.add(mesh);return mesh;}
+  function addMask(mode){
+    const shape=new THREE.Shape();shape.moveTo(-.067,.965);shape.quadraticCurveTo(-.053,.995,-.032,.998);shape.lineTo(.032,.998);shape.quadraticCurveTo(.053,.995,.067,.965);shape.lineTo(.055,.902);shape.quadraticCurveTo(.045,.875,.03,.858);shape.lineTo(-.03,.858);shape.quadraticCurveTo(-.045,.875,-.055,.902);shape.lineTo(-.067,.965);
+    const mask=new THREE.Mesh(new THREE.ExtrudeGeometry(shape,{depth:.012,bevelEnabled:true,bevelSegments:2,steps:1,bevelSize:.003,bevelThickness:.003}),oxygenMaskMaterial);mask.name=mode==='non-rebreather'?'nonRebreatherMask':'simpleOxygenMask';mask.position.z=-1.258;oxygenRig.add(mask);
+    for(const side of [-1,1])addOxygenTube([[side*.06,.966,-1.25],[side*.1,.98,-1.32],[side*.112,.995,-1.4],[side*.09,1.002,-1.48]],.0025,oxygenSiliconeMaterial,`maskHeadStrap${side}`);
+    addOxygenTube([[0,.86,-1.246],[-.04,.85,-1.28],[-.1,.88,-1.34],[-.14,.91,-1.4]],.0035,oxygenTubeMaterial,'maskSupplyTail');
+    if(mode==='non-rebreather'){
+      const bag=new THREE.Mesh(new THREE.SphereGeometry(1,18,14),new THREE.MeshPhysicalMaterial({color:'#d7e8e7',roughness:.28,metalness:0,clearcoat:.45,transparent:true,opacity:.34,depthWrite:false,side:THREE.DoubleSide}));bag.name='reservoirBag';bag.scale.set(.034,.065,.022);bag.position.set(0,.785,-1.235);oxygenRig.add(bag);
+      addOxygenTube([[0,.848,-1.246],[0,.827,-1.24],[0,.817,-1.238]],.004,oxygenSiliconeMaterial,'reservoirConnector');
+      const valve=new THREE.Mesh(new THREE.CylinderGeometry(.014,.014,.006,18),oxygenSiliconeMaterial);valve.name='oneWayValve';valve.rotation.x=Math.PI/2;valve.position.set(0,.86,-1.238);oxygenRig.add(valve);
+    }
+  }
+  function addNasalCannula(){
+    addOxygenTube([[-.12,.945,-1.405],[-.105,.942,-1.365],[-.088,.925,-1.325],[-.055,.916,-1.292],[-.028,.912,-1.278],[0,.913,-1.276],[.028,.912,-1.278],[.055,.916,-1.292],[.088,.925,-1.325],[.105,.942,-1.365],[.12,.945,-1.405]],.0028,oxygenSiliconeMaterial,'nasalCannulaLoop');
+    for(const side of [-1,1])addOxygenTube([[side*.026,.912,-1.279],[side*.018,.916,-1.264],[side*.014,.92,-1.251]],.0022,oxygenSiliconeMaterial,`nasalProng${side}`);
+    addOxygenTube([[-.12,.945,-1.405],[-.22,.93,-1.43],[-.42,.92,-1.43],[-.62,1.03,-1.48],[-.72,1.28,-1.61],[-.76,1.48,-1.73],[-.76,1.6,-1.825]],.0038,oxygenTubeMaterial,'wallToCannulaTubing');
+  }
+  function setOxygenDevice(mode){
+    if(!Object.hasOwn(deviceLabels,mode))throw new RangeError(`Unknown oxygen device: ${mode}`);
+    const previous=simulationState.devices.oxygen.type;if(previous===mode)return simulationState.devices.oxygen;
+    for(const child of [...oxygenRig.children]){oxygenRig.remove(child);child.geometry?.dispose();}
+    if(mode==='nasal-cannula')addNasalCannula();
+    if(mode==='simple-mask'||mode==='non-rebreather'){
+      addMask(mode);
+      addOxygenTube([[-.14,.91,-1.4],[-.3,.9,-1.42],[-.5,.97,-1.45],[-.68,1.2,-1.58],[-.76,1.43,-1.7],[-.76,1.6,-1.825]],.0038,oxygenTubeMaterial,'wallToMaskTubing');
+    }
+    const active=mode!=='off';oxygenRig.visible=active;sourceLightMaterial.emissive.set(active?'#4caab7':'#102b2d');sourceLightMaterial.color.set(active?'#86d6df':'#2d5e62');sourceLightMaterial.emissiveIntensity=active ? .65 : .2;
+    simulationState.devices.oxygen={type:mode,label:deviceLabels[mode],active,connected:active};simulationState.support.oxygen=active;
+    simulationState.attachments.oxygen=active?{source:'OXYGEN wall outlet',patientInterface:deviceLabels[mode]}:null;
+    render();return simulationState.devices.oxygen;
+  }
+  function updatePatientBreathing(elapsedSeconds,rate,enabled){
+    if(!chest||!chestScale||!enabled||matchMedia('(prefers-reduced-motion: reduce)').matches)return;
+    const elapsed=Math.min(.1,Math.max(0,elapsedSeconds));breathingPhase=(breathingPhase+elapsed*Math.max(0,rate)/60*Math.PI*2)%(Math.PI*2);
+    // Animate at presentation pace from modeled RR; 60x advances model time, not this visual cycle.
+    const inhale=Math.max(0,Math.sin(breathingPhase));chest.scale.y=chestScale.y*(1+.012*inhale);simulationState.patient.breathing.rate=rate;simulationState.patient.breathing.phase=breathingPhase;
+    const now=performance.now();if(now-lastBreathingRender>=50){lastBreathingRender=now;render();}
+  }
  const views={room:{position:[2.1,3.65,6.45],target:[0,1.2,-.1]},bed:{position:[1.45,2.12,2.0],target:[0,.91,-.72]},headwall:{position:[.1,1.9,.68],target:[0,1.5,-1.68]}};
  let rendering=false;
  function constrain(){controls.target.x=THREE.MathUtils.clamp(controls.target.x,-1.6,1.6);controls.target.y=THREE.MathUtils.clamp(controls.target.y,.35,1.95);controls.target.z=THREE.MathUtils.clamp(controls.target.z,-1.65,1);camera.position.x=THREE.MathUtils.clamp(camera.position.x,-2.28,2.28);camera.position.y=THREE.MathUtils.clamp(camera.position.y,.3,5.2);camera.position.z=Math.max(camera.position.z,-1.65);if(camera.position.z<2.15)camera.position.y=Math.min(camera.position.y,2.68);camera.lookAt(controls.target);}
@@ -62,7 +113,7 @@ try {
  document.addEventListener('keydown',e=>{if(e.key.toLowerCase()==='r')setView('room');});
  addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);composer.setSize(innerWidth,innerHeight);render();});
  renderer.domElement.addEventListener('webglcontextlost',e=>{e.preventDefault();fail(new Error('Graphics context was lost. Reload the file to restore the room.'));});
- window.sicu={scene,root,camera,renderer,controls,objects,setView,render,setCyanosis};setView('room');loading.classList.add('hidden');
+  window.sicu={scene,root,camera,renderer,controls,objects,setView,render,setCyanosis,state:simulationState,setOxygenDevice,updatePatientBreathing};setView('room');loading.classList.add('hidden');
 }catch(e){fail(e);}
 </script>
 <!-- Phase 1: additive monitor UI; the room module and embedded model above are unchanged. -->
@@ -84,7 +135,9 @@ try {
   <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;font-size:10px;color:#555b55"><label for="sicu-pain-select">Pain</label><select id="sicu-pain-select" aria-label="Pain level" style="max-width:76%;padding:5px 7px;border:1px solid #d9ddd6;border-radius:6px;background:#fff;color:#343a36;font:11px Arial,sans-serif"><option>None</option><option>Mild</option><option>Moderate</option><option>Severe</option></select></div>
   <div class="sicu-group"><div>MEDS</div><button type="button" data-intervention="Norepinephrine infusion">Norepinephrine infusion</button><button type="button" data-intervention="Vancomycin IV">Vancomycin IV</button><button type="button" data-intervention="Insulin infusion">Insulin infusion</button><button type="button" data-intervention="Propofol sedation">Propofol sedation</button></div>
   <div class="sicu-group"><div>FLUIDS</div><button type="button" data-intervention="NS 500mL bolus">NS 500mL bolus</button><button type="button" data-intervention="LR 500mL bolus">LR 500mL bolus</button><button type="button" data-intervention="Blood transfusion (1 unit)">Blood transfusion (1 unit)</button></div>
-  <div class="sicu-group"><div>EQUIPMENT</div><button type="button" data-intervention="FiO2 +10%">FiO2 +10%</button><button type="button" data-intervention="FiO2 -10%">FiO2 -10%</button><button type="button" data-intervention="PEEP +2">PEEP +2</button><button type="button" data-intervention="PEEP -2">PEEP -2</button></div>
+   <div class="sicu-group"><div>EQUIPMENT</div><button type="button" data-intervention="FiO2 +10%">FiO2 +10%</button><button type="button" data-intervention="FiO2 -10%">FiO2 -10%</button><button type="button" data-intervention="PEEP +2">PEEP +2</button><button type="button" data-intervention="PEEP -2">PEEP -2</button></div>
+   <div class="sicu-group" id="sicu-oxygen-controls"><div>OXYGEN SUPPORT</div><label for="sicu-oxygen-device">Patient interface</label><select id="sicu-oxygen-device" aria-label="Oxygen device"><option value="off">Off</option><option value="nasal-cannula">Nasal cannula</option><option value="simple-mask">Simple face mask</option><option value="non-rebreather">Non-rebreather mask</option></select><p id="sicu-oxygen-status" role="status" aria-live="polite">Oxygen device off</p><small style="display:block;margin-top:3px;font:9px/1.4 Arial,sans-serif;color:#747871">Visual interface only: selection has no vital effect. Flow rate, delivered FiO₂, and ventilation are not modeled; FiO₂/PEEP interventions remain separate illustrative effects.</small></div>
+   <div class="sicu-group" id="sicu-audio-controls"><div>OXYGEN FLOW SOUND</div><button type="button" id="sicu-audio-toggle" aria-pressed="false">Mute oxygen sound</button><label for="sicu-audio-volume">Volume</label><input id="sicu-audio-volume" type="range" min="0" max="100" value="22" aria-label="Oxygen sound volume"></div>
   </div>
 </aside>
 <div id="sicu-intervention-chip" role="status" aria-live="polite" style="position:fixed;left:50%;top:18px;z-index:20;transform:translateX(-50%);padding:9px 13px;border-radius:9px;background:#28312f;color:#fff;font:12px ui-monospace,monospace;box-shadow:0 4px 20px #0003;opacity:0;pointer-events:none;transition:opacity .25s"></div>
@@ -95,6 +148,7 @@ try {
 </aside>
 <style>
 .sicu-group{display:flex;flex-wrap:wrap;gap:4px;margin:8px 0}.sicu-group>div{flex-basis:100%;font-size:9px;letter-spacing:.12em;color:#747871;margin-bottom:1px}.sicu-group button{border:1px solid #d9ddd6;background:#f7f8f5;padding:6px 8px;font-size:10px;white-space:nowrap}.sicu-group button:hover{background:#e8ece5}
+#sicu-interventions{max-height:58vh}#sicu-oxygen-controls label,#sicu-audio-controls label{font-size:10px;color:#555b55;align-self:center}#sicu-oxygen-device{max-width:65%;padding:5px 7px;border:1px solid #d9ddd6;border-radius:6px;background:#fff;color:#343a36;font:11px Arial,sans-serif}#sicu-oxygen-status{flex-basis:100%;margin:0;color:#5c706d;font:10px/1.4 Arial,sans-serif}#sicu-audio-volume{width:90px;accent-color:#648d8e}
 @media(max-width:700px){#sicu-interventions{left:8px;bottom:8px;width:min(330px,calc(100vw - 16px));max-height:40vh}#sicu-event-panel{right:8px;top:54px;width:min(290px,calc(100vw - 16px))}#sicu-intervention-chip{top:8px;max-width:calc(100vw - 24px);white-space:normal;text-align:center}}
 </style>
 <script>
@@ -108,6 +162,12 @@ try {
     }
     const api = window.sicu;
     const vitals = {hr:72, spo2:98, nibpSys:118, nibpDia:76, rr:16, temp:37.1, glucose:142};
+    api.state.patient.vitals = vitals;
+    const oxygenSelect = document.getElementById('sicu-oxygen-device');
+    const oxygenStatus = document.getElementById('sicu-oxygen-status');
+    const applyOxygenDevice = api.setOxygenDevice;
+    const audioToggle = document.getElementById('sicu-audio-toggle');
+    const audioVolume = document.getElementById('sicu-audio-volume');
     const phase1Vitals = {...vitals};
     const phase1Baselines = {...vitals};
     const scenarioDriftCenterOffsets = {};
@@ -210,6 +270,7 @@ try {
       Object.assign(phase1Vitals, vitals);
       clock.simMinutes = simSeconds / 60;
       applyModelOutput();
+      api.state.patient.breathing.rate = vitals.rr;
       updateProgress();
       api.setCyanosis(vitals.spo2);
     }
@@ -223,6 +284,79 @@ try {
       eventList.appendChild(item);
       eventList.scrollTop = eventList.scrollHeight;
     }
+    let audioContext = null, audioGain = null, audioSource = null, lastAudioGain = -1;
+    function ensureOxygenAudio() {
+      if (!api.state.audio.available) return false;
+      try {
+        if (!audioContext) {
+          const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+          audioContext = new AudioContextClass();
+          const buffer = audioContext.createBuffer(1, audioContext.sampleRate * 2, audioContext.sampleRate);
+          const samples = buffer.getChannelData(0);
+          for (let i = 0; i < samples.length; i++) samples[i] = (Math.random() * 2 - 1) * .65;
+          audioSource = audioContext.createBufferSource(); audioSource.buffer = buffer; audioSource.loop = true;
+          const filter = audioContext.createBiquadFilter(); filter.type = 'bandpass'; filter.frequency.value = 1450; filter.Q.value = .42;
+          audioGain = audioContext.createGain(); audioGain.gain.value = 0;
+          audioSource.connect(filter); filter.connect(audioGain); audioGain.connect(audioContext.destination); audioSource.start();
+        }
+        if (audioContext.state === 'suspended') audioContext.resume().catch(() => {});
+        return true;
+      } catch (_) { api.state.audio.available = false; return false; }
+    }
+    function syncOxygenAudio() {
+      if (!audioGain || !audioContext) return;
+      if (document.visibilityState === 'hidden') {
+        lastAudioGain = 0;
+        audioGain.gain.cancelScheduledValues(audioContext.currentTime);
+        audioGain.gain.setValueAtTime(0,audioContext.currentTime);
+        audioContext.suspend().catch(() => {});
+        return;
+      }
+      const enabled = api.state.devices.oxygen.active && !api.state.audio.muted && !clock.paused;
+      const gain = enabled ? api.state.audio.volume * .08 : 0;
+      if (Math.abs(gain - lastAudioGain) >= .0005) {
+        lastAudioGain = gain;
+        audioGain.gain.cancelScheduledValues(audioContext.currentTime);
+        audioGain.gain.setTargetAtTime(gain,audioContext.currentTime,.12);
+      }
+      if (enabled && audioContext.state === 'suspended') audioContext.resume().catch(() => {});
+    }
+    function updateOxygenStatus() {
+      const state = api.state.devices.oxygen;
+      oxygenSelect.value = state.type;
+      oxygenStatus.textContent = state.active ? `${state.label} connected to the wall oxygen outlet and patient` : 'Oxygen device off · no patient attachment';
+      if (!api.state.audio.available) oxygenStatus.textContent += ' · Flow sound unavailable';
+    }
+    document.addEventListener('visibilitychange',syncOxygenAudio);
+    function commitOxygenDevice(mode, fromUserGesture = false) {
+      const previous = api.state.devices.oxygen;
+      const changed = previous.type !== mode;
+      const result = applyOxygenDevice(mode);
+      const current = api.state.devices.oxygen;
+      oxygenSelect.value = current.type;
+      if (changed) {
+        const message = mode === 'off' ? `Oxygen support stopped: ${previous.label}` : previous.type === 'off' ? `Oxygen support started: ${current.label}` : `Oxygen interface changed: ${current.label}`;
+        addLog(message); showInterventionChip(message);
+      }
+      if (fromUserGesture && current.active) ensureOxygenAudio();
+      updateOxygenStatus(); syncOxygenAudio(); draw();
+      return result;
+    }
+    function setOxygenDevice(mode) { return commitOxygenDevice(mode); }
+    api.setOxygenDevice = setOxygenDevice;
+    oxygenSelect.addEventListener('change', () => commitOxygenDevice(oxygenSelect.value, true));
+    audioToggle.addEventListener('click', () => {
+      api.state.audio.muted = !api.state.audio.muted;
+      audioToggle.textContent = api.state.audio.muted ? 'Unmute oxygen sound' : 'Mute oxygen sound';
+      audioToggle.setAttribute('aria-pressed',String(api.state.audio.muted));
+      if (!api.state.audio.muted && api.state.devices.oxygen.active) ensureOxygenAudio();
+      syncOxygenAudio();
+    });
+    audioVolume.addEventListener('input', () => {
+      api.state.audio.volume = Number(audioVolume.value) / 100;
+      if (api.state.devices.oxygen.active) ensureOxygenAudio();
+      lastAudioGain = -1; syncOxygenAudio();
+    });
     function scenarioOffsetAt(key, minutes) {
       const tween = scenarioTweens[key];
       if (!tween) return scenarioOffsets[key] || 0;
@@ -308,6 +442,7 @@ try {
       const next = DIAGNOSES[id];
       if (!next) throw new RangeError(`Unknown diagnosis: ${id}`);
       if (next.id === scenario.id) return;
+      if (api.state.devices.oxygen.active) api.setOxygenDevice('off');
       advance(performance.now());
       scenario = next;
       api.diagnosis = scenario;
@@ -316,6 +451,7 @@ try {
       scenarioLabel.textContent = `Educational simulation · Not clinically validated · ${scenario.name}`;
       Object.assign(phase1Vitals, phase1Baselines);
       Object.assign(vitals, phase1Baselines);
+      api.state.patient.breathing.rate = vitals.rr;
       for (const state of [scenarioDriftCenterOffsets, scenarioOffsets, scenarioTweens]) {
         for (const key of Object.keys(state)) delete state[key];
       }
@@ -383,12 +519,14 @@ try {
     function pause() {
       advance(performance.now());
       clock.paused = true;
+      syncOxygenAudio();
       syncButtons();
       draw();
     }
     function resume() {
       if (clock.paused) lastWallTime = performance.now();
       clock.paused = false;
+      syncOxygenAudio();
       syncButtons();
     }
     // Extend the existing API without replacing the room scene, controls or objects.
@@ -400,6 +538,10 @@ try {
       diagnosisSelect.appendChild(option);
     }
     diagnosisSelect.value = scenario.id;
+    oxygenSelect.value = api.state.devices.oxygen.type;
+    audioToggle.textContent = api.state.audio.muted ? 'Unmute oxygen sound' : 'Mute oxygen sound';
+    audioToggle.setAttribute('aria-pressed',String(api.state.audio.muted));
+    updateOxygenStatus();
     diagnosisSelect.addEventListener('change', () => setDiagnosis(diagnosisSelect.value));
     function setInterventionExpanded(expanded) {
       interventionContent.style.display = expanded ? 'block' : 'none';
@@ -466,10 +608,13 @@ try {
       label(String(Math.round(vitals.spo2)),132,177,'#82bfff',34);
       label('RR',250,142,'#ffda7b'); label('/min',294,142,'#7d9690');
       label(String(Math.round(vitals.rr)),250,177,'#ffda7b',34);
+      const oxygenDevice = api.state.devices.oxygen;
+      if (oxygenDevice.active) label(`O₂ · ${{'nasal-cannula':'NC','simple-mask':'MASK','non-rebreather':'NRB'}[oxygenDevice.type]}`,218,20,'#a9d7dc',9);
       label('NIBP',14,207,'#d9e4df');
       label(`${Math.round(vitals.nibpSys)}/${Math.round(vitals.nibpDia)}`,79,209,'#f2f5f3',23);
       label('mmHg',185,207,'#7d9690');
-      const description = `ECG, heart rate ${Math.round(vitals.hr)} beats per minute, oxygen saturation ${Math.round(vitals.spo2)} percent, blood pressure ${Math.round(vitals.nibpSys)} over ${Math.round(vitals.nibpDia)}, respiratory rate ${Math.round(vitals.rr)} per minute`;
+      const oxygenDescription = oxygenDevice.active ? `, oxygen interface ${oxygenDevice.label} connected` : ', no oxygen interface attached';
+      const description = `ECG, heart rate ${Math.round(vitals.hr)} beats per minute, oxygen saturation ${Math.round(vitals.spo2)} percent, blood pressure ${Math.round(vitals.nibpSys)} over ${Math.round(vitals.nibpDia)}, respiratory rate ${Math.round(vitals.rr)} per minute${oxygenDescription}`;
       if (canvas.getAttribute('aria-label') !== description) canvas.setAttribute('aria-label',description);
     }
     clockPanel.style.display = 'flex'; monitorPanel.style.display = 'block';
@@ -479,7 +624,8 @@ try {
     api.setCyanosis(vitals.spo2);
     resizeCanvas(); syncButtons();
     window.addEventListener('resize', resizeCanvas);
-    function frame(now) {advance(now); draw(); requestAnimationFrame(frame);}
+    let lastVisualFrame=performance.now();
+    function frame(now) {const visualElapsed=Math.min(.1,Math.max(0,now-lastVisualFrame)/1000);lastVisualFrame=now;advance(now);api.updatePatientBreathing(visualElapsed,vitals.rr,!clock.paused);syncOxygenAudio();draw();requestAnimationFrame(frame);}
     requestAnimationFrame(frame);
   }
   attachMonitor();
@@ -583,7 +729,7 @@ body.sicu-present>header,body.sicu-present .help,body.sicu-present .tag,body.sic
     const {v,map,pressor,insulin,antibiotic,assessments} = state;
     const content = {
       'Cardiovascular':`HR ${Math.round(v.hr)} bpm · NIBP ${Math.round(v.nibpSys)}/${Math.round(v.nibpDia)} mmHg · MAP ${map.toFixed(1)} mmHg · Pressor active: ${pressor ? 'Yes' : 'No'}`,
-      'Respiratory':`SpO₂ ${Math.round(v.spo2)}% · RR ${Math.round(v.rr)}/min · FiO₂: not yet modeled · PEEP: not yet modeled`,
+      'Respiratory':`SpO₂ ${Math.round(v.spo2)}% · RR ${Math.round(v.rr)}/min · Oxygen device: ${window.sicu.state.devices.oxygen.label} · FiO₂ setting: not modeled · PEEP: not modeled`,
       'Infectious Disease':`Temp ${v.temp.toFixed(1)} °C · Antibiotics given: ${antibiotic}`,
       'Endocrine':`Glucose ${Math.round(v.glucose)} mg/dL · Insulin active: ${insulin ? 'Yes' : 'No'}`
     };
@@ -637,6 +783,7 @@ body.sicu-present>header,body.sicu-present .help,body.sicu-present .tag,body.sic
     const interventionNames = [...document.querySelectorAll('[data-intervention]')].map(button => button.dataset.intervention);
     const log = eventMessages();
     const given = log.filter(line => interventionNames.some(name => line.endsWith(`  ${name}`)));
+    const equipmentChanges = log.filter(line => line.includes('Oxygen support ') || line.includes('Oxygen interface changed:'));
     const assessmentLines = [...document.querySelectorAll('.sicu-assessment-row')].flatMap(row => {
       const draft = row.querySelector('.sicu-assessment-draft');
       return draft && !draft.hidden && draft.textContent ? [`${row.querySelector('h3')?.textContent}: ${draft.textContent}`] : [];
@@ -644,7 +791,10 @@ body.sicu-present>header,body.sicu-present .help,body.sicu-present .tag,body.sic
     return [
       `Diagnosis: ${diagnosis.name}`,
       `Sim date: Not modeled · Sim time: ${simTime}`,
+      `Oxygen device: ${api.state.devices.oxygen.active ? api.state.devices.oxygen.label + ' connected' : 'Off'}`,
+      'Visual interface only: selection has no vital effect. Flow rate, delivered FiO₂, and ventilation are not modeled; FiO₂/PEEP interventions remain separate illustrative effects.',
       `Interventions given:\n${given.length ? given.join('\n') : 'None recorded'}`,
+      `Oxygen equipment log:\n${equipmentChanges.length ? equipmentChanges.join('\n') : 'No oxygen device changes'}`,
       `Admission vitals (t=0): ${formatVitals(admission)}`,
       `Current vitals: ${formatVitals(vitals)}`,
       `Progress: ${document.getElementById('sicu-progress')?.textContent || 'Not modeled'}`,
