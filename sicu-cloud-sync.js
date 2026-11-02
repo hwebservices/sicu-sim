@@ -50,11 +50,12 @@ let remoteRecord = null;
 let remoteExists = false;
 let baselineRecord = null;
 let checkGeneration = 0;
+let syncBusy = false;
 
 const recordKey = (n) => `sicuCasePacketPatient${n}`;
 const baselineKey = (n) => `sicuCloudBaselinePatient${n}`;
 const selectedSlot = () => String(slot.value);
-const recordRef = (n) => doc(db, 'users', user.uid, 'sicuCasePackets', `patient-${n}`);
+const recordRef = (n, uid = user.uid) => doc(db, 'users', uid, 'sicuCasePackets', `patient-${n}`);
 
 function stable(value) {
   if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`;
@@ -82,7 +83,11 @@ function localRecord() {
 }
 
 function readBaseline() {
-  try { return JSON.parse(localStorage.getItem(baselineKey(selectedSlot())) || 'null'); } catch (_) { return null; }
+  return readBaselineFor(selectedSlot());
+}
+
+function readBaselineFor(n) {
+  try { return JSON.parse(localStorage.getItem(baselineKey(n)) || 'null'); } catch (_) { return null; }
 }
 
 function saveBaseline(record) {
@@ -102,11 +107,13 @@ function renderButtons() {
   const signedIn = Boolean(user);
   signInButton.hidden = signedIn;
   signOutButton.hidden = !signedIn;
-  checkButton.disabled = !signedIn || !slotReady;
-  uploadButton.disabled = !signedIn || !slotReady || !fictionalCheck.checked || !['new', 'local-ahead', 'in-sync'].includes(syncState);
-  downloadButton.disabled = !signedIn || !slotReady || !['remote-ahead', 'conflict', 'in-sync'].includes(syncState);
+  slot.disabled = syncBusy || !slotReady;
+  signOutButton.disabled = syncBusy;
+  checkButton.disabled = !signedIn || !slotReady || syncBusy;
+  uploadButton.disabled = !signedIn || !slotReady || syncBusy || !fictionalCheck.checked || !['new', 'local-ahead', 'in-sync'].includes(syncState);
+  downloadButton.disabled = !signedIn || !slotReady || syncBusy || !['remote-ahead', 'conflict', 'in-sync'].includes(syncState);
   replaceButton.hidden = syncState !== 'conflict';
-  replaceButton.disabled = !signedIn || !slotReady || !fictionalCheck.checked || syncState !== 'conflict';
+  replaceButton.disabled = !signedIn || !slotReady || syncBusy || !fictionalCheck.checked || syncState !== 'conflict';
 }
 
 function currentRelation() {
@@ -135,15 +142,17 @@ function describeState() {
 }
 
 async function checkCloud() {
-  if (!user) return;
+  if (!user || syncBusy) return;
+  syncBusy = true;
+  const checkedUid = user.uid;
   const checkedSlot = selectedSlot();
   const generation = ++checkGeneration;
   syncState = 'checking';
   renderButtons();
   setStatus(describeState());
   try {
-    const snapshot = await getDoc(recordRef(checkedSlot));
-    if (generation !== checkGeneration) return;
+    const snapshot = await getDoc(recordRef(checkedSlot, checkedUid));
+    if (generation !== checkGeneration || user?.uid !== checkedUid || selectedSlot() !== checkedSlot) return;
     remoteExists = snapshot.exists();
     remoteRecord = remoteExists ? snapshot.data()?.record ?? null : null;
     baselineRecord = readBaseline();
@@ -154,12 +163,14 @@ async function checkCloud() {
     }
     setStatus(describeState());
   } catch (error) {
-    if (generation !== checkGeneration) return;
+    if (generation !== checkGeneration || user?.uid !== checkedUid || selectedSlot() !== checkedSlot) return;
     syncState = 'error';
     remoteRecord = null;
     setStatus(`Cloud check failed (${error?.code || 'network'}). Local autosave is unchanged.`, true);
+  } finally {
+    syncBusy = false;
+    renderButtons();
   }
-  renderButtons();
 }
 
 function confirmFictional() {
@@ -175,95 +186,96 @@ function serializedRecord(record) {
 }
 
 async function writeCloud({ overwrite = false } = {}) {
-  if (!user || !confirmFictional()) return;
+  if (!user || syncBusy || !confirmFictional()) return;
   const writeSlot = selectedSlot();
+  const writeUid = user.uid;
   const generation = checkGeneration;
   const local = localRecord();
   if (serializedRecord(local) > 700000) {
     setStatus('This record is too large to sync. Local autosave remains available.', true);
     return;
   }
-  if (!remoteExists) {
-    if (syncState !== 'new') await checkCloud();
-    if (!user) return;
-  }
+  const expectedExists = remoteExists;
+  const expectedRemote = remoteRecord;
   const relation = currentRelation();
-  if (relation.state === 'in-sync') {
-    saveBaseline(remoteRecord);
-    setStatus('Cloud copy is already current.');
-    renderButtons();
-    return;
-  }
-  if (relation.state === 'remote-ahead') {
-    setStatus('The cloud copy is newer. Load it or compare the copies before replacing anything.', true);
-    renderButtons();
-    return;
-  }
-  if (relation.state === 'conflict' && !overwrite) {
-    syncState = 'conflict';
-    setStatus(describeState(), true);
-    renderButtons();
-    return;
-  }
-  if (overwrite && !window.confirm('Replace the cloud copy of this selected fictional record with the local copy on this device?')) return;
-  if (!overwrite && remoteRecord && relation.state === 'local-ahead' && !window.confirm('Save this device’s newer fictional record to your private cloud copy?')) return;
-  if (!overwrite && !remoteExists && !window.confirm('Upload this selected record to your private cloud account? Confirm it contains fictional teaching data only.')) return;
-
-  try {
-    const ref = recordRef(writeSlot);
-    const wrote = await runTransaction(db, async (transaction) => {
-      const latest = await transaction.get(ref);
-      const latestExists = latest.exists();
-      const latestRecord = latestExists ? latest.data()?.record ?? null : null;
-      if (latestExists !== remoteExists || !same(latestRecord, remoteRecord)) {
-        return { wrote: false, latestExists, latestRecord };
-      }
-      transaction.set(ref, {
-        schemaVersion: 1,
-        record: local,
-        clientUpdatedAt: Date.now(),
-        updatedAt: serverTimestamp(),
-      });
-      return { wrote: true };
-    });
-    if (generation !== checkGeneration || writeSlot !== selectedSlot()) {
-      setStatus(wrote.wrote
-        ? 'Cloud copy saved for the previous selection. The current record was not changed; check its cloud copy before syncing.'
-        : 'The selected record changed while saving. No local record was changed; check the current cloud copy before syncing.');
-      return;
-    }
-    if (!wrote.wrote) {
-      remoteExists = wrote.latestExists;
-      remoteRecord = wrote.latestRecord;
-      baselineRecord = readBaseline();
-      syncState = currentRelation().state;
-      setStatus('The cloud copy changed while you were reviewing it. Nothing was overwritten; check again.', true);
-      renderButtons();
-      return;
-    }
-    remoteRecord = local;
-    remoteExists = true;
-    baselineRecord = local;
-    saveBaselineFor(writeSlot, local);
-    if (generation !== checkGeneration || writeSlot !== selectedSlot()) {
-      setStatus('Cloud copy saved for the previous selection. The current record was not changed; check its cloud copy before syncing.');
-      return;
-    }
-    const relationAfterSave = currentRelation();
-    syncState = relationAfterSave.state;
-    setStatus(syncState === 'in-sync'
-      ? 'Cloud copy saved for this record.'
-      : 'Cloud copy saved. Newer local edits remain on this device and have not been overwritten.');
-  } catch (error) {
-    syncState = 'error';
-    setStatus(`Cloud save failed (${error?.code || 'network'}). The local draft is unchanged.`, true);
-  }
+  syncBusy = true;
   renderButtons();
+  try {
+    if (relation.state === 'in-sync') {
+      saveBaseline(remoteRecord);
+      setStatus('Cloud copy is already current.');
+      return;
+    }
+    if (relation.state === 'remote-ahead') {
+      setStatus('The cloud copy is newer. Load it or compare the copies before replacing anything.', true);
+      return;
+    }
+    if (relation.state === 'conflict' && !overwrite) {
+      syncState = 'conflict';
+      setStatus(describeState(), true);
+      return;
+    }
+    if (overwrite && !window.confirm('Replace the cloud copy of this selected fictional record with the local copy on this device?')) return;
+    if (!overwrite && remoteRecord && relation.state === 'local-ahead' && !window.confirm('Save this device’s newer fictional record to your private cloud copy?')) return;
+    if (!overwrite && !remoteExists && !window.confirm('Upload this selected record to your private cloud account? Confirm it contains fictional teaching data only.')) return;
+
+    try {
+      const ref = recordRef(writeSlot, writeUid);
+      const wrote = await runTransaction(db, async (transaction) => {
+        const latest = await transaction.get(ref);
+        const latestExists = latest.exists();
+        const latestRecord = latestExists ? latest.data()?.record ?? null : null;
+        if (generation !== checkGeneration || user?.uid !== writeUid || selectedSlot() !== writeSlot) {
+          return { wrote: false, latestExists, latestRecord, staleSelection: true };
+        }
+        if (latestExists !== expectedExists || !same(latestRecord, expectedRemote)) {
+          return { wrote: false, latestExists, latestRecord };
+        }
+        transaction.set(ref, {
+          schemaVersion: 1,
+          record: local,
+          clientUpdatedAt: Date.now(),
+          updatedAt: serverTimestamp(),
+        });
+        return { wrote: true };
+      });
+      if (wrote.staleSelection || generation !== checkGeneration || user?.uid !== writeUid || writeSlot !== selectedSlot()) {
+        setStatus('The selected record or account changed while saving. No sync write was made for the changed selection.');
+        return;
+      }
+      if (!wrote.wrote) {
+        remoteExists = wrote.latestExists;
+        remoteRecord = wrote.latestRecord;
+        baselineRecord = readBaselineFor(writeSlot);
+        syncState = currentRelation().state;
+        setStatus('The cloud copy changed while you were reviewing it. Nothing was overwritten; check again.', true);
+        renderButtons();
+        return;
+      }
+      remoteRecord = local;
+      remoteExists = true;
+      baselineRecord = local;
+      saveBaselineFor(writeSlot, local);
+      const relationAfterSave = currentRelation();
+      syncState = relationAfterSave.state;
+      setStatus(syncState === 'in-sync'
+        ? 'Cloud copy saved for this record.'
+        : 'Cloud copy saved. Newer local edits remain on this device and have not been overwritten.');
+    } catch (error) {
+      syncState = 'error';
+      setStatus(`Cloud save failed (${error?.code || 'network'}). The local draft is unchanged.`, true);
+    }
+  } finally {
+    syncBusy = false;
+    renderButtons();
+  }
 }
 
 async function loadCloud() {
-  if (!user || !remoteExists || !remoteRecord) return;
+  if (!user || syncBusy || !remoteExists || !remoteRecord) return;
   if (!window.confirm('Replace this device’s selected local draft with the private cloud copy? This will not change the cloud copy.')) return;
+  syncBusy = true;
+  renderButtons();
   const localKey = recordKey(selectedSlot());
   localStorage.setItem(localKey, JSON.stringify(remoteRecord));
   saveBaseline(remoteRecord);
