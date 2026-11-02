@@ -13,6 +13,9 @@ function makeHarness() {
   let readGate = null;
   let reads = 0;
   let writes = 0;
+  let throwOnStorageKey = null;
+  let pendingLocalSave = null;
+  const draftEvents = [];
 
   class FakeElement {
     constructor(value = '') {
@@ -39,6 +42,13 @@ function makeHarness() {
   form.elements = [title];
   get('case-med-list').children = [];
 
+  const localStorage = {
+    getItem: (key) => storage.get(key) ?? null,
+    setItem: (key, value) => {
+      if (key === throwOnStorageKey) throw new Error('quota-exceeded');
+      storage.set(key, value);
+    },
+  };
   const snapshot = (document) => ({
     exists: () => Boolean(document),
     data: () => document,
@@ -50,13 +60,24 @@ function makeHarness() {
     Uint8Array,
     document: { getElementById: get },
     localStorage: {
-      getItem: (key) => storage.get(key) ?? null,
-      setItem: (key, value) => storage.set(key, value),
+      getItem: localStorage.getItem,
+      setItem: localStorage.setItem,
     },
     window: {
       confirm: () => true,
       setTimeout: (callback) => { callback(); return 1; },
       location: { reload() {} },
+      sicuCaseDraftController: {
+        replaceFromCloud: (n, record) => {
+          if (pendingLocalSave) {
+            draftEvents.push('flush-pending-local-save');
+            pendingLocalSave();
+            pendingLocalSave = null;
+          }
+          localStorage.setItem(`sicuCasePacketPatient${n}`, JSON.stringify(record));
+          draftEvents.push('replace-with-cloud-record');
+        },
+      },
     },
     initializeApp: () => ({}),
     GoogleAuthProvider: class { setCustomParameters() {} },
@@ -72,7 +93,7 @@ function makeHarness() {
       let staged = null;
       const result = await callback({
         get: async () => {
-          if (readGate) await readGate.promise;
+          if (readGate) await readGate;
           return snapshot(cloud);
         },
         set: (_ref, document) => { staged = document; },
@@ -88,7 +109,7 @@ function makeHarness() {
   vm.runInNewContext(source, sandbox, { filename: 'sicu-cloud-sync.js' });
 
   const base = { values: { title: 'base' }, medicationCount: 0 };
-  cloud = { record: base };
+  cloud = { schemaVersion: 1, record: base, clientUpdatedAt: 1 };
 
   return {
     elements,
@@ -98,7 +119,13 @@ function makeHarness() {
     set cloud(value) { cloud = value; },
     get reads() { return reads; },
     get writes() { return writes; },
+    get storage() { return storage; },
+    get draftEvents() { return draftEvents; },
     setReadGate(promise) { readGate = promise; },
+    setThrowOnStorageKey(key) { throwOnStorageKey = key; },
+    queuePendingLocalSave(callback) { pendingLocalSave = callback; },
+    runPendingLocalSave() { if (pendingLocalSave) pendingLocalSave(); },
+    get hasPendingLocalSave() { return Boolean(pendingLocalSave); },
     async signIn() {
       await authChanged({ uid: 'owner-uid', email: 'hwebservices80@gmail.com', emailVerified: true });
     },
@@ -125,7 +152,7 @@ async function run() {
   const upload = uploadButton.handlers.click();
   assert.equal(app.elements.get('case-cloud-check').disabled, true, 'other sync controls lock during upload');
 
-  app.cloud = { record: { values: { title: 'remote new' }, medicationCount: 0 } };
+  app.cloud = { schemaVersion: 1, record: { values: { title: 'remote new' }, medicationCount: 0 }, clientUpdatedAt: 2 };
   await cloudButton.handlers.click();
   assert.equal(app.reads, 1, 'a concurrent cloud check must not run during upload');
   releaseTransactionRead();
@@ -159,6 +186,43 @@ async function run() {
   await accountUpload;
   assert.equal(accountApp.writes, 0, 'a changed signed-in account must not write');
   assert.equal(accountApp.cloud.record.values.title, 'base');
+
+  const malformedApp = makeHarness();
+  malformedApp.cloud = { schemaVersion: 2, record: { values: { title: 'malformed' }, medicationCount: 0 }, clientUpdatedAt: 3 };
+  await malformedApp.signIn();
+  await malformedApp.elements.get('case-cloud-check').handlers.click();
+  assert.match(malformedApp.elements.get('case-cloud-status').textContent, /unsupported or malformed/i);
+  assert.equal(malformedApp.elements.get('case-cloud-download').disabled, true, 'malformed cloud data cannot be downloaded');
+  assert.equal(malformedApp.elements.get('case-cloud-replace').hidden, false, 'malformed cloud data requires explicit replacement review');
+
+  const downloadApp = makeHarness();
+  await downloadApp.signIn();
+  await downloadApp.elements.get('case-cloud-check').handlers.click();
+  const originalDraft = JSON.stringify({ values: { title: 'local-before-cloud' }, medicationCount: 0 });
+  downloadApp.storage.set('sicuCasePacketPatient1', originalDraft);
+  downloadApp.queuePendingLocalSave(() => downloadApp.storage.set('sicuCasePacketPatient1', JSON.stringify({ values: { title: 'pending-local-save' }, medicationCount: 0 })));
+  await downloadApp.elements.get('case-cloud-download').handlers.click();
+  assert.deepEqual(downloadApp.draftEvents, ['flush-pending-local-save', 'replace-with-cloud-record']);
+  assert.equal(JSON.parse(downloadApp.storage.get('sicuCasePacketPatient1')).values.title, 'base');
+  downloadApp.runPendingLocalSave();
+  assert.equal(JSON.parse(downloadApp.storage.get('sicuCasePacketPatient1')).values.title, 'base', 'a stale queued save must not replace the imported cloud record');
+  assert.equal(downloadApp.hasPendingLocalSave, false);
+
+  const storageFailureApp = makeHarness();
+  await storageFailureApp.signIn();
+  await storageFailureApp.elements.get('case-cloud-check').handlers.click();
+  const preservedDraft = JSON.stringify({ values: { title: 'must-survive' }, medicationCount: 0 });
+  storageFailureApp.storage.set('sicuCasePacketPatient1', preservedDraft);
+  storageFailureApp.setThrowOnStorageKey('sicuCasePacketPatient1');
+  await storageFailureApp.elements.get('case-cloud-download').handlers.click();
+  assert.equal(storageFailureApp.elements.get('case-patient-slot').disabled, false, 'storage failures unlock record selection');
+  assert.match(storageFailureApp.elements.get('case-cloud-status').textContent, /Cloud load failed/);
+  assert.equal(storageFailureApp.storage.get('sicuCasePacketPatient1'), preservedDraft, 'failed storage writes preserve the prior draft');
+
+  const html = fs.readFileSync(new URL('../index.html', `file://${__filename}`), 'utf8');
+  const draftController = html.slice(html.indexOf('window.sicuCaseDraftController='), html.indexOf("slot.addEventListener('change'"));
+  assert.match(draftController, /clearTimeout\(saveTimer\);saveTimer=0;if\(!writeRecordNow\(\)\)throw new Error\('local-save-failed'\)/);
+  assert.ok(draftController.indexOf('writeRecordNow()') < draftController.indexOf('localStorage.setItem(storageKey(n),JSON.stringify(record))'), 'pending local saves flush before the cloud record replaces them');
   console.log('SICU cloud sync race regression passed.');
 }
 

@@ -48,6 +48,7 @@ let authNotice = null;
 let syncState = 'signed-out';
 let remoteRecord = null;
 let remoteExists = false;
+let remoteToken = null;
 let baselineRecord = null;
 let checkGeneration = 0;
 let syncBusy = false;
@@ -68,6 +69,24 @@ function stable(value) {
 function same(a, b) {
   if (a === null || b === null) return a === b;
   return stable(a) === stable(b);
+}
+
+function isValidPacketRecord(record, n) {
+  if (!record || typeof record !== 'object' || Array.isArray(record)) return false;
+  if (!record.values || typeof record.values !== 'object' || Array.isArray(record.values)) return false;
+  if (!Number.isInteger(record.medicationCount) || record.medicationCount < 0 || record.medicationCount > 20) return false;
+  if (record.seedVersion !== undefined && (!Number.isFinite(record.seedVersion) || typeof record.seedVersion !== 'number')) return false;
+  if (!Object.entries(record.values).every(([key, value]) => typeof key === 'string' && typeof value === 'string')) return false;
+  const patientNumber = record.values['packet.patientNumber'];
+  return patientNumber === undefined || patientNumber === String(n);
+}
+
+function tokenForCloudDocument(data) {
+  return data === null ? null : stable({
+    schemaVersion: data.schemaVersion,
+    record: data.record,
+    clientUpdatedAt: data.clientUpdatedAt,
+  });
 }
 
 function localRecord() {
@@ -111,7 +130,7 @@ function renderButtons() {
   signOutButton.disabled = syncBusy;
   checkButton.disabled = !signedIn || !slotReady || syncBusy;
   uploadButton.disabled = !signedIn || !slotReady || syncBusy || !fictionalCheck.checked || !['new', 'local-ahead', 'in-sync'].includes(syncState);
-  downloadButton.disabled = !signedIn || !slotReady || syncBusy || !['remote-ahead', 'conflict', 'in-sync'].includes(syncState);
+  downloadButton.disabled = !signedIn || !slotReady || syncBusy || !remoteExists || !remoteRecord || !['remote-ahead', 'conflict', 'in-sync'].includes(syncState);
   replaceButton.hidden = syncState !== 'conflict';
   replaceButton.disabled = !signedIn || !slotReady || syncBusy || !fictionalCheck.checked || syncState !== 'conflict';
 }
@@ -154,8 +173,16 @@ async function checkCloud() {
     const snapshot = await getDoc(recordRef(checkedSlot, checkedUid));
     if (generation !== checkGeneration || user?.uid !== checkedUid || selectedSlot() !== checkedSlot) return;
     remoteExists = snapshot.exists();
-    remoteRecord = remoteExists ? snapshot.data()?.record ?? null : null;
+    const cloudData = remoteExists ? snapshot.data() : null;
+    remoteToken = tokenForCloudDocument(cloudData);
+    const validRecord = !remoteExists || (cloudData?.schemaVersion === 1 && isValidPacketRecord(cloudData?.record, checkedSlot));
+    remoteRecord = remoteExists && validRecord ? cloudData.record : null;
     baselineRecord = readBaseline();
+    if (remoteExists && !validRecord) {
+      syncState = 'conflict';
+      setStatus('The cloud copy has an unsupported or malformed format. It was not loaded locally; review it before choosing Replace cloud copy.', true);
+      return;
+    }
     syncState = currentRelation().state;
     if (syncState === 'in-sync') {
       baselineRecord = remoteRecord;
@@ -166,6 +193,7 @@ async function checkCloud() {
     if (generation !== checkGeneration || user?.uid !== checkedUid || selectedSlot() !== checkedSlot) return;
     syncState = 'error';
     remoteRecord = null;
+    remoteToken = null;
     setStatus(`Cloud check failed (${error?.code || 'network'}). Local autosave is unchanged.`, true);
   } finally {
     syncBusy = false;
@@ -195,8 +223,13 @@ async function writeCloud({ overwrite = false } = {}) {
     setStatus('This record is too large to sync. Local autosave remains available.', true);
     return;
   }
+  if (!isValidPacketRecord(local, writeSlot)) {
+    setStatus('This record does not match the supported SICU packet format and was not uploaded.', true);
+    return;
+  }
   const expectedExists = remoteExists;
   const expectedRemote = remoteRecord;
+  const expectedRemoteToken = remoteToken;
   const relation = currentRelation();
   syncBusy = true;
   renderButtons();
@@ -221,20 +254,24 @@ async function writeCloud({ overwrite = false } = {}) {
 
     try {
       const ref = recordRef(writeSlot, writeUid);
+      const clientUpdatedAt = Date.now();
       const wrote = await runTransaction(db, async (transaction) => {
         const latest = await transaction.get(ref);
         const latestExists = latest.exists();
-        const latestRecord = latestExists ? latest.data()?.record ?? null : null;
+        const latestData = latestExists ? latest.data() : null;
+        const latestRecordValid = !latestExists || (latestData?.schemaVersion === 1 && isValidPacketRecord(latestData?.record, writeSlot));
+        const latestRecord = latestExists && latestRecordValid ? latestData.record : null;
+        const latestToken = tokenForCloudDocument(latestData);
         if (generation !== checkGeneration || user?.uid !== writeUid || selectedSlot() !== writeSlot) {
-          return { wrote: false, latestExists, latestRecord, staleSelection: true };
+          return { wrote: false, latestExists, latestRecord, latestToken, staleSelection: true };
         }
-        if (latestExists !== expectedExists || !same(latestRecord, expectedRemote)) {
-          return { wrote: false, latestExists, latestRecord };
+        if (latestExists !== expectedExists || !same(latestToken, expectedRemoteToken) || (latestExists && !latestRecordValid && !overwrite) || !same(latestRecord, expectedRemote)) {
+          return { wrote: false, latestExists, latestRecord, latestToken };
         }
         transaction.set(ref, {
           schemaVersion: 1,
           record: local,
-          clientUpdatedAt: Date.now(),
+          clientUpdatedAt,
           updatedAt: serverTimestamp(),
         });
         return { wrote: true };
@@ -246,6 +283,7 @@ async function writeCloud({ overwrite = false } = {}) {
       if (!wrote.wrote) {
         remoteExists = wrote.latestExists;
         remoteRecord = wrote.latestRecord;
+        remoteToken = wrote.latestToken;
         baselineRecord = readBaselineFor(writeSlot);
         syncState = currentRelation().state;
         setStatus('The cloud copy changed while you were reviewing it. Nothing was overwritten; check again.', true);
@@ -254,6 +292,7 @@ async function writeCloud({ overwrite = false } = {}) {
       }
       remoteRecord = local;
       remoteExists = true;
+      remoteToken = tokenForCloudDocument({ schemaVersion: 1, record: local, clientUpdatedAt });
       baselineRecord = local;
       saveBaselineFor(writeSlot, local);
       const relationAfterSave = currentRelation();
@@ -273,13 +312,28 @@ async function writeCloud({ overwrite = false } = {}) {
 
 async function loadCloud() {
   if (!user || syncBusy || !remoteExists || !remoteRecord) return;
+  const downloadSlot = selectedSlot();
+  if (!isValidPacketRecord(remoteRecord, downloadSlot)) {
+    syncState = 'conflict';
+    setStatus('The cloud copy failed validation and was not loaded. Your local draft is unchanged.', true);
+    renderButtons();
+    return;
+  }
   if (!window.confirm('Replace this device’s selected local draft with the private cloud copy? This will not change the cloud copy.')) return;
   syncBusy = true;
   renderButtons();
-  const localKey = recordKey(selectedSlot());
-  localStorage.setItem(localKey, JSON.stringify(remoteRecord));
-  saveBaseline(remoteRecord);
-  window.location.reload();
+  try {
+    const controller = window.sicuCaseDraftController;
+    if (!controller || typeof controller.replaceFromCloud !== 'function') throw new Error('draft-controller-unavailable');
+    saveBaselineFor(downloadSlot, remoteRecord);
+    controller.replaceFromCloud(downloadSlot, remoteRecord);
+    window.location.reload();
+  } catch (error) {
+    setStatus(`Cloud load failed (${error?.message || 'local-storage'}). The previous local draft was retained.`, true);
+  } finally {
+    syncBusy = false;
+    renderButtons();
+  }
 }
 
 signInButton.addEventListener('click', async () => {
@@ -305,6 +359,8 @@ slot.addEventListener('change', () => {
   checkGeneration += 1;
   slotReady = false;
   remoteRecord = null;
+  remoteExists = false;
+  remoteToken = null;
   baselineRecord = readBaseline();
   syncState = user ? 'unknown' : 'signed-out';
   renderButtons();
@@ -323,6 +379,8 @@ onAuthStateChanged(auth, async (signedInUser) => {
     user = null;
     syncState = 'signed-out';
     remoteRecord = null;
+    remoteExists = false;
+    remoteToken = null;
     setStatus(describeState());
     renderButtons();
     return;
