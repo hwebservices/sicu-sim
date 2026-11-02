@@ -325,8 +325,18 @@ async function loadCloud() {
   try {
     const controller = window.sicuCaseDraftController;
     if (!controller || typeof controller.replaceFromCloud !== 'function') throw new Error('draft-controller-unavailable');
-    saveBaselineFor(downloadSlot, remoteRecord);
     controller.replaceFromCloud(downloadSlot, remoteRecord);
+    try {
+      saveBaselineFor(downloadSlot, remoteRecord);
+      baselineRecord = remoteRecord;
+      syncState = 'in-sync';
+      setStatus('Cloud copy loaded on this device.');
+    } catch (error) {
+      baselineRecord = readBaselineFor(downloadSlot);
+      syncState = 'unknown';
+      setStatus(`Cloud copy loaded locally, but sync status could not be saved (${error?.message || 'storage'}). Check the cloud copy before syncing again.`, true);
+      return;
+    }
     window.location.reload();
   } catch (error) {
     setStatus(`Cloud load failed (${error?.message || 'local-storage'}). The previous local draft was retained.`, true);

@@ -15,6 +15,7 @@ function makeHarness() {
   let writes = 0;
   let throwOnStorageKey = null;
   let pendingLocalSave = null;
+  let throwInDraftImport = false;
   const draftEvents = [];
 
   class FakeElement {
@@ -74,6 +75,7 @@ function makeHarness() {
             pendingLocalSave();
             pendingLocalSave = null;
           }
+          if (throwInDraftImport) throw new Error('draft-import-failed');
           localStorage.setItem(`sicuCasePacketPatient${n}`, JSON.stringify(record));
           draftEvents.push('replace-with-cloud-record');
         },
@@ -123,6 +125,7 @@ function makeHarness() {
     get draftEvents() { return draftEvents; },
     setReadGate(promise) { readGate = promise; },
     setThrowOnStorageKey(key) { throwOnStorageKey = key; },
+    setThrowInDraftImport(value) { throwInDraftImport = value; },
     queuePendingLocalSave(callback) { pendingLocalSave = callback; },
     runPendingLocalSave() { if (pendingLocalSave) pendingLocalSave(); },
     get hasPendingLocalSave() { return Boolean(pendingLocalSave); },
@@ -218,6 +221,32 @@ async function run() {
   assert.equal(storageFailureApp.elements.get('case-patient-slot').disabled, false, 'storage failures unlock record selection');
   assert.match(storageFailureApp.elements.get('case-cloud-status').textContent, /Cloud load failed/);
   assert.equal(storageFailureApp.storage.get('sicuCasePacketPatient1'), preservedDraft, 'failed storage writes preserve the prior draft');
+
+  const conflictDownloadApp = makeHarness();
+  conflictDownloadApp.elements.get('case-cloud-fictional').checked = true;
+  await conflictDownloadApp.signIn();
+  await conflictDownloadApp.elements.get('case-cloud-check').handlers.click();
+  const priorBaseline = conflictDownloadApp.storage.get('sicuCloudBaselinePatient1');
+  conflictDownloadApp.title.value = 'local conflict edit';
+  conflictDownloadApp.cloud = { schemaVersion: 1, record: { values: { title: 'remote conflict edit' }, medicationCount: 0 }, clientUpdatedAt: 4 };
+  await conflictDownloadApp.elements.get('case-cloud-check').handlers.click();
+  assert.equal(conflictDownloadApp.elements.get('case-cloud-upload').disabled, true, 'both-side edits require explicit conflict resolution');
+  conflictDownloadApp.setThrowInDraftImport(true);
+  await conflictDownloadApp.elements.get('case-cloud-download').handlers.click();
+  assert.equal(conflictDownloadApp.storage.get('sicuCloudBaselinePatient1'), priorBaseline, 'failed import preserves the prior sync baseline');
+  assert.equal(conflictDownloadApp.title.value, 'local conflict edit', 'failed import preserves the visible local record');
+  assert.equal(conflictDownloadApp.elements.get('case-cloud-upload').disabled, true, 'failed import keeps conflict unresolved');
+  assert.equal(conflictDownloadApp.elements.get('case-cloud-replace').hidden, false, 'conflict resolution remains explicit after failed import');
+
+  const baselineFailureApp = makeHarness();
+  baselineFailureApp.elements.get('case-cloud-fictional').checked = true;
+  await baselineFailureApp.signIn();
+  await baselineFailureApp.elements.get('case-cloud-check').handlers.click();
+  baselineFailureApp.setThrowOnStorageKey('sicuCloudBaselinePatient1');
+  await baselineFailureApp.elements.get('case-cloud-download').handlers.click();
+  assert.equal(JSON.parse(baselineFailureApp.storage.get('sicuCasePacketPatient1')).values.title, 'base', 'successful import remains local when baseline storage fails');
+  assert.equal(baselineFailureApp.elements.get('case-cloud-upload').disabled, true, 'baseline failure requires a fresh cloud check before syncing');
+  assert.match(baselineFailureApp.elements.get('case-cloud-status').textContent, /loaded locally, but sync status could not be saved/i);
 
   const html = fs.readFileSync(new URL('../index.html', `file://${__filename}`), 'utf8');
   const draftController = html.slice(html.indexOf('window.sicuCaseDraftController='), html.indexOf("slot.addEventListener('change'"));
