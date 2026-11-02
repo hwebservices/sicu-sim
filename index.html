@@ -896,6 +896,20 @@ body.sicu-present>header,body.sicu-present .help,body.sicu-present .tag,body.sic
 <main id="case-panel" aria-label="Case presentation form" hidden>
   <div class="case-top"><div><p class="case-kicker">SICU / DOCUMENTATION</p><h2>Encounter presentation</h2></div><div class="case-top-actions"><label class="case-patient-picker">Patient record<select id="case-patient-slot" aria-label="Patient record"><option value="1">Patient 1</option><option value="2">Patient 2</option></select></label><span id="case-save-status" role="status">Saved on this device</span><button id="case-load-sample" type="button" title="Replace this fictional scenario record with its current sample values">Reload sample</button><button id="case-print" type="button">Print report</button><button id="case-close" type="button" aria-label="Hide case form">Hide form</button></div></div>
   <p class="case-note">Documentation workspace · Entries autosave locally in this browser on this device. Do not enter patient names or identifying prehospital provider information.</p>
+  <details id="case-cloud-sync" style="margin:10px 0;padding:10px 12px;border:1px solid #c8d2cd;border-radius:8px;background:#fff">
+    <summary style="cursor:pointer;font-weight:600">Optional cloud sync</summary>
+    <p class="case-help">Cloud sync stores only the selected record in your private Firebase account. This is configured for fictional teaching cases only. Do not sync real patient information, names, dates of birth, or identifiers. Existing drafts stay on this device until you choose an action below.</p>
+    <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px">
+      <button id="case-cloud-signin" type="button">Sign in with Google</button>
+      <button id="case-cloud-signout" type="button" hidden>Sign out</button>
+      <button id="case-cloud-check" type="button" disabled>Check cloud copy</button>
+      <button id="case-cloud-upload" type="button" disabled>Save local copy to cloud</button>
+      <button id="case-cloud-download" type="button" disabled>Load cloud copy to this device</button>
+      <button id="case-cloud-replace" type="button" disabled hidden>Replace cloud copy</button>
+    </div>
+    <label style="display:flex;align-items:flex-start;gap:8px;margin:9px 0;font-size:12px"><input id="case-cloud-fictional" type="checkbox">I confirm this selected record contains fictional teaching data only and no real patient information or identifiers.</label>
+    <p id="case-cloud-status" role="status" aria-live="polite" class="case-help">Cloud sync is optional; local autosave remains available if Firebase cannot be reached.</p>
+  </details>
   <nav id="case-mobile-tabs" class="case-mobile-tabs" role="tablist" aria-label="Patient documentation tabs"></nav>
   <nav class="case-nav" aria-label="Case sections"><a href="#case-encounter">Encounter</a><a href="#case-vitals">Vitals timeline</a><a href="#case-medications">Medication record</a><a href="#case-presentation">Presentation</a></nav>
   <form id="case-form">
@@ -1074,6 +1088,8 @@ body.sicu-present>header,body.sicu-present .help,body.sicu-present .tag,body.sic
   if(!document.getElementById('case-scenario-note')){const note=document.createElement('p');note.id='case-scenario-note';note.className='case-note';note.textContent='Three fictional, prefilled rotation scenarios are available in Patient record. Scenario vitals are fixed documentation data and do not follow the live room simulation. Selecting DKA activates the DKA simulator safety lock and holds the live diagnosis selector on DKA until another record is selected; arrest and stroke records are documentation-only. Existing drafts are preserved; use Reload sample to intentionally replace this record with current sample values. No clinical orders are generated.';document.querySelector('.case-note')?.after(note);}
 })();
 </script>
+
+<script type="module" src="./sicu-cloud-sync.js"></script>
 
 </body>
 </html>
