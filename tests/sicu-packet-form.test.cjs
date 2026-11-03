@@ -4,6 +4,7 @@ const vm = require('node:vm');
 
 const html = fs.readFileSync(new URL('../index.html', `file://${__filename}`), 'utf8');
 const sync = fs.readFileSync(new URL('../sicu-cloud-sync.js', `file://${__filename}`), 'utf8');
+const inlineScripts = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)].map(match => match[1]);
 
 function has(source, pattern, message) {
   assert.match(source, pattern, message);
@@ -18,7 +19,7 @@ assert.doesNotMatch(html, /syncLiveVitals|readonly[^>]*vitals\.row/, 'simulator 
 for (const name of [
   'packet.admission.contributingEvents', 'packet.criticalCare.discussedWithMedicalStaff',
   'packet.labReasoning', 'packet.labCorrectiveIntervention', 'packet.vent.inUse',
-  'packet.vent.ordered.', 'packet.vent.ordered.mode', 'packet.vent.rationale', 'packet.learning.lectureTime',
+  'packet.vent.ordered.', 'packet.vent.ordered.mode', 'packet.vent.ordered.modeOther', 'packet.vent.rationale', 'packet.learning.lectureTime',
   'packet.emce.evaluationStatus', 'packet.emce.presentationStatus',
   'packet.emce.edImproved', 'packet.emce.edHindered', 'packet.emce.icuImproved',
   'packet.emce.icuHindered', 'packet.transport.scopeReview.',
@@ -32,10 +33,20 @@ has(html, /rowLimits=\{medications:100,drips:100,monitoring:50,scope:100\}/, 'ne
 has(html, /count>=limit\?`Limit reached \(\$\{limit\} \$\{label\}\)\. Existing saved rows are retained\.`/, 'row limits explain that existing rows remain intact');
 const reportBuilder = html.slice(html.indexOf('function packetReport()'), html.indexOf('const nativePrint=window.print.bind(window)'));
 has(reportBuilder, /Additional overall improvement notes[\s\S]*?Additional overall hindrance notes[\s\S]*?Overall evaluation notes/, 'print packet retains legacy overall improved/hindered notes');
-has(html, /patientNumber\.value=n;updateRowLimits\(\);status\.textContent=saved\?'Draft restored from this device'/, 'record selection restores the selected local draft');
+has(html, /patientNumber\.value=n;window\.sicuPacketRows\.updateLimits\(\);status\.textContent=saved\?'Draft restored from this device'/, 'record selection restores the selected local draft');
 has(sync, /dripCount: dripList\.children\.length, monitoringCount: monitorRows\.children\.length, transportScopeCount: transportScopeRows\.children\.length/, 'cloud packet stores dynamic row counts');
 has(sync, /if \(!Number\.isInteger\(record\.medicationCount\) \|\| record\.medicationCount < 0\) return false/, 'cloud validation accepts legacy row counts above current entry caps');
 has(sync, /function canonicalPacketRecord[\s\S]*?function samePacketRecord/, 'legacy cloud drafts compare without mutating saved records');
+
+const medicationScript = inlineScripts.find(script => script.includes('window.sicuPacketRows=') && script.includes('function addMedicationRow'));
+const packetControllerScript = inlineScripts.find(script => script.includes('function loadRecord(n)') && script.includes('function addMonitoringRow'));
+assert.ok(medicationScript, 'row helper owner script exists');
+assert.ok(packetControllerScript, 'packet restore controller script exists');
+has(medicationScript, /window\.sicuPacketRows=\{limits:rowLimits,updateLimits:updateRowLimits,addMedication,addDrip\}/, 'row helpers are exposed across script scopes');
+has(packetControllerScript, /window\.sicuPacketRows\.addMedication\(\)/, 'restore calls medication helper through shared API');
+has(packetControllerScript, /window\.sicuPacketRows\.addDrip\(\)/, 'restore calls IV drip helper through shared API');
+has(packetControllerScript, /window\.sicuPacketRows\.updateLimits\(\)/, 'monitor and scope row updates use shared API');
+assert.doesNotMatch(packetControllerScript, /\browLimits\b|\bupdateRowLimits\(/, 'packet controller does not reference inaccessible lexical names');
 
 const helpers = sync.slice(sync.indexOf('function stable('), sync.indexOf('function isValidPacketRecord('));
 const oldDraft = {
