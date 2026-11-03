@@ -10,8 +10,7 @@
 <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}</script>
 </head>
 <body>
-<header><h1><span class="number">01</span>Surgical intensive care</h1><p>Clinical presentation room</p></header>
-<div class="help">Drag to orbit · Scroll to zoom<br>Right drag to pan · Two fingers on touch</div>
+<header><h1><span class="number">01</span>Surgical intensive care</h1><p>Educational SICU simulation · not for patient care</p></header>
 <div class="tag">Single patient room · 5 × 4 m</div>
 <nav class="toolbar" aria-label="Room views"><button data-view="room" class="active">Room</button><button data-view="bed">Bedside</button><button data-view="headwall">Headwall</button><div class="separator"></div><button id="reset" title="Reset camera (R)">Reset</button><button id="fullscreen" title="Fullscreen">Full screen</button></nav>
 <div id="loading" role="status"><b>SICU / 01</b><span id="loadstatus">Preparing the room…</span><div id="error"></div></div>
@@ -119,9 +118,6 @@ try {
 <!-- Phase 1: additive monitor UI; the room module and embedded model above are unchanged. -->
 <div id="sicu-clock" role="group" aria-label="Simulation clock" style="display:none;position:fixed;top:82px;left:28px;z-index:4;align-items:center;gap:4px;padding:6px 9px;background:#fffffff2;border:1px solid #e0e2dc;border-radius:10px;box-shadow:0 3px 16px #20231e12">
   <time id="sicu-time" aria-label="Elapsed simulation time" style="font:500 17px ui-monospace,monospace;font-variant-numeric:tabular-nums;margin-right:8px">00:00</time>
-  <button type="button" data-sicu-speed="1" aria-pressed="true">1x</button>
-  <button type="button" data-sicu-speed="60" aria-pressed="false">60x</button>
-  <button type="button" id="sicu-pause" aria-pressed="false">Pause</button>
 </div>
 <div id="sicu-monitor" role="region" aria-label="Live bedside monitor" style="display:none;position:fixed;right:24px;bottom:88px;z-index:4;width:min(372px,calc(100vw - 32px));border:5px solid #292e31;border-radius:12px;overflow:hidden;background:#091010;box-shadow:0 8px 30px #0c151533;pointer-events:none">
   <canvas id="sicu-monitor-canvas" role="img" aria-label="ECG and vital signs" style="width:100%;height:auto;aspect-ratio:362/224"></canvas>
@@ -514,7 +510,7 @@ try {
       api.scenario = scenario;
       diagnosisSelect.value = scenario.id;
       syncInsulinGate();
-      scenarioLabel.textContent = `Educational simulation · Not clinically validated · ${scenario.name}`;
+      scenarioLabel.textContent = scenario.name;
       Object.assign(phase1Vitals, phase1Baselines);
       Object.assign(vitals, phase1Baselines);
       api.state.patient.breathing.rate = vitals.rr;
@@ -573,8 +569,10 @@ try {
         button.style.background = active ? '#343a36' : 'transparent';
         button.style.color = active ? '#ffffff' : '#5d615c';
       }
-      pauseButton.textContent = clock.paused ? 'Resume' : 'Pause';
-      pauseButton.setAttribute('aria-pressed', String(clock.paused));
+      if (pauseButton) {
+        pauseButton.textContent = clock.paused ? 'Resume' : 'Pause';
+        pauseButton.setAttribute('aria-pressed', String(clock.paused));
+      }
     }
     function setSpeed(speed) {
       if (speed !== 1 && speed !== 60) throw new RangeError('Simulation speed must be 1 or 60.');
@@ -632,7 +630,7 @@ try {
       document.getElementById('sicu-event-chevron').textContent = expanded ? '+' : '−';
     });
     speedButtons.forEach(button => button.addEventListener('click', () => setSpeed(Number(button.dataset.sicuSpeed))));
-    pauseButton.addEventListener('click', () => clock.paused ? resume() : pause());
+    pauseButton?.addEventListener('click', () => clock.paused ? resume() : pause());
 
     function resizeCanvas() {
       const ratio = Math.min(window.devicePixelRatio || 1, 2);
@@ -704,14 +702,14 @@ try {
 <button id="sicu-present-toggle" type="button" aria-pressed="false" style="position:fixed;right:190px;top:20px;z-index:7;padding:9px 13px;background:#fffffff2;border:1px solid #e0e2dc;box-shadow:0 3px 14px #20231e12">Present</button>
 <section id="sicu-assessment-panel" aria-label="Assessment and plan" style="display:none;position:fixed;left:18px;top:174px;bottom:22px;z-index:6;width:min(470px,calc(100vw - 36px));overflow:auto;padding:18px;background:#fffffff5;border:1px solid #dfe2db;border-radius:13px;box-shadow:0 6px 28px #20231e1a">
   <header style="position:static;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;pointer-events:auto;margin-bottom:12px">
-    <div><h2 style="font-size:17px;font-weight:550;margin:0">Patient assessment</h2><p style="font-size:10px;letter-spacing:.11em;text-transform:uppercase;color:#98582e;margin:5px 0 0">Educational simulation · Not clinically validated</p></div>
+    <div><h2 style="font-size:17px;font-weight:550;margin:0">Patient assessment</h2></div>
     <button type="button" id="sicu-copy-summary" style="border:1px solid #d9ddd6;background:#f7f8f5;padding:8px 10px;white-space:nowrap">Copy summary</button>
   </header>
   <div id="sicu-assessment-rows"></div>
   <div id="sicu-copy-status" role="status" aria-live="polite" style="font:11px ui-monospace,monospace;color:#59625a;margin-top:8px"></div>
 </section>
 <aside id="sicu-report-panel" aria-label="Daily report" style="display:none;position:fixed;right:18px;top:68px;bottom:18px;z-index:9;width:min(420px,calc(100vw - 36px));overflow:auto;padding:16px;background:#fffffff5;border:1px solid #dfe2db;border-radius:13px;box-shadow:0 6px 28px #20231e1a">
-  <header style="position:static;display:flex;align-items:center;justify-content:space-between;gap:12px;pointer-events:auto;margin-bottom:10px"><div><h2 style="font-size:16px;font-weight:550;margin:0">Daily report</h2><p style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#98582e;margin:5px 0 0">Educational simulation · Not clinically validated</p></div><button type="button" id="sicu-copy-report" style="border:1px solid #d9ddd6;background:#f7f8f5;padding:8px 10px;white-space:nowrap">Copy report</button></header>
+  <header style="position:static;display:flex;align-items:center;justify-content:space-between;gap:12px;pointer-events:auto;margin-bottom:10px"><div><h2 style="font-size:16px;font-weight:550;margin:0">Daily report</h2></div><button type="button" id="sicu-copy-report" style="border:1px solid #d9ddd6;background:#f7f8f5;padding:8px 10px;white-space:nowrap">Copy report</button></header>
   <pre id="sicu-report-content" style="white-space:pre-wrap;overflow-wrap:anywhere;margin:0;font:11px/1.55 ui-monospace,monospace;color:#414541"></pre>
   <div id="sicu-report-status" role="status" aria-live="polite" style="font:11px ui-monospace,monospace;color:#59625a;margin-top:8px"></div>
 </aside>
@@ -904,14 +902,14 @@ body.sicu-present>header,body.sicu-present .help,body.sicu-present .tag,body.sic
   requestAnimationFrame(function tick(){render();if(reportPanel.style.display==='block')renderReport();requestAnimationFrame(tick);});
 })();
 </script>
-<!-- Case presentation: documentation-only fields and a printable encounter summary. -->
+<!-- Case presentation form and printable encounter summary. -->
 <button id="case-toggle" type="button" aria-expanded="false" style="position:fixed;left:28px;top:174px;z-index:7;padding:9px 13px;background:#fffffff2;border:1px solid #e0e2dc">Case presentation</button>
 <main id="case-panel" role="dialog" aria-modal="true" aria-labelledby="case-panel-title" aria-label="Case presentation form" hidden>
-  <div class="case-top"><div><p class="case-kicker">SICU / DOCUMENTATION</p><h2 id="case-panel-title" tabindex="-1">Encounter presentation</h2></div><div class="case-top-actions"><label class="case-patient-picker">Patient record<select id="case-patient-slot" aria-label="Patient record"><option value="1">Patient 1</option><option value="2">Patient 2</option></select></label><span id="case-save-status" role="status">Saved on this device</span><button id="case-load-sample" type="button" title="Replace this fictional scenario record with its current sample values">Reload sample</button><button id="case-print" type="button">Print report</button><button id="case-close" type="button" aria-label="Hide case form">Hide form</button></div></div>
-  <p class="case-note">Fictional teaching records autosave on this device; never enter real patient identifiers.</p>
+  <div class="case-top"><div><p class="case-kicker">SICU / DOCUMENTATION</p><h2 id="case-panel-title" tabindex="-1">Encounter presentation</h2></div><div class="case-top-actions"><label class="case-patient-picker">Patient record<select id="case-patient-slot" aria-label="Patient record"><option value="1">Patient 1</option><option value="2">Patient 2</option></select></label><span id="case-save-status" role="status">Saved on this device</span><button id="case-print" type="button">Print report</button><button id="case-close" type="button" aria-label="Hide case form">Hide form</button></div></div>
+  <p class="case-note">Fictional teaching data only; never enter real patient information.</p>
   <details id="case-cloud-sync" style="margin:10px 0;padding:10px 12px;border:1px solid #c8d2cd;border-radius:8px;background:#fff">
     <summary style="cursor:pointer;font-weight:600">Optional cloud sync</summary>
-    <p class="case-help">Cloud sync stores only the selected record in your private Firebase account. This is configured for fictional teaching cases only. Do not sync real patient information, names, dates of birth, or identifiers. Existing drafts stay on this device until you choose an action below.</p>
+    <p class="case-help">Sync only fictional teaching records to your private account. Existing drafts remain on this device until you choose an action.</p>
     <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px">
       <button id="case-cloud-signin" type="button">Sign in with Google</button>
       <button id="case-cloud-signout" type="button" hidden>Sign out</button>
@@ -932,7 +930,7 @@ body.sicu-present>header,body.sicu-present .help,body.sicu-present .tag,body.sic
       <div class="case-grid"><label>Fictional patient name<input name="patientName" autocomplete="off" placeholder="Enter fictional name"></label><label>Age<input name="age" inputmode="numeric" placeholder="Age"></label><label>Admission date<input name="admissionDate" type="date"></label><label>Diagnosis<input name="diagnosis" placeholder="Document diagnosis"></label><label>Initial complaint<input name="complaint" placeholder="Initial complaint"></label><label>Arrival mode<input name="arrivalMode" placeholder="Arrival mode"></label><label>Preceptor<input name="preceptor" placeholder="Name"></label><label>Preceptor title<input name="preceptorTitle" placeholder="Title"></label></div>
       <div class="case-grid case-grid-wide"><label>History of present illness<textarea name="hpi" rows="3"></textarea></label><label>Past medical / surgical history<textarea name="history" rows="3"></textarea></label><label>Medications / allergies<textarea name="allergies" rows="2"></textarea></label><label>Review of systems<textarea name="ros" rows="3"></textarea></label><label>Physical examination<textarea name="physicalExam" rows="4"></textarea></label></div>
     </section>
-    <section id="case-vitals" class="case-section"><h3>Vitals timeline</h3><p class="case-help">Enter recorded encounter values. GCS, etCO₂, urine output, and pH are documentation fields only.</p><div class="case-table-scroll"><table class="case-table"><thead><tr><th>Timepoint</th><th>Time</th><th>MAP</th><th>BP</th><th>RR</th><th>HR</th><th>Intervention, if any?</th><th>Temp</th><th>etCO₂</th><th>SpO₂</th><th>GCS</th><th>ECG / 12-lead note</th><th>Ventilator type</th><th>Pump type</th><th>Urine output</th><th>pH</th></tr></thead><tbody id="case-vitals-rows"></tbody></table></div></section>
+    <section id="case-vitals" class="case-section"><h3>Vitals timeline</h3><p class="case-help">Enter encounter values as recorded, including GCS, etCO₂, urine output, and pH.</p><div class="case-table-scroll"><table class="case-table"><thead><tr><th>Timepoint</th><th>Time</th><th>MAP</th><th>BP</th><th>RR</th><th>HR</th><th>Intervention, if any?</th><th>Temp</th><th>etCO₂</th><th>SpO₂</th><th>GCS</th><th>ECG / 12-lead note</th><th>Ventilator type</th><th>Pump type</th><th>Urine output</th><th>pH</th></tr></thead><tbody id="case-vitals-rows"></tbody></table></div></section>
     <section id="case-medications" class="case-section"><div class="case-heading-row"><h3>Medication record</h3><button type="button" id="case-add-med">Add medication</button></div><div id="case-med-list"></div></section>
     <section id="case-presentation" class="case-section"><h3>Case presentation</h3>
       <label>Presentation title<input name="presentationTitle" placeholder="Case presentation title"></label>
@@ -948,7 +946,7 @@ body.sicu-present>header,body.sicu-present .help,body.sicu-present .tag,body.sic
       <div class="case-grid"><label>Condition since ICU admission<select name="packet.conditionSinceAdmission"><option value="">Choose</option><option>Improved</option><option>Worsened</option><option>Stayed the same</option></select></label><label>Why ICU care rather than a floor or ED?<textarea name="packet.icuRationale" rows="3"></textarea></label></div>
       <label>Response to critical care interventions<textarea name="packet.interventionResponse" rows="4"></textarea></label>
     </section>
-    <section id="case-labs" class="case-section"><h3>Laboratory worksheet</h3><p class="case-help">Transcribe patient lab values and reference information from the chart. This form does not calculate or interpret values.</p><div id="case-lab-groups"></div><label>Abnormal lab values<textarea name="packet.abnormalLabs" rows="3"></textarea></label><label>Treatments documented for abnormal values<textarea name="packet.labTreatments" rows="3"></textarea></label><label>Underlying causes discussed or documented<textarea name="packet.labCauses" rows="3"></textarea></label></section>
+    <section id="case-labs" class="case-section"><h3>Laboratory worksheet</h3><p class="case-help">Enter lab values and reference information as recorded in the chart.</p><div id="case-lab-groups"></div><label>Abnormal lab values<textarea name="packet.abnormalLabs" rows="3"></textarea></label><label>Treatments documented for abnormal values<textarea name="packet.labTreatments" rows="3"></textarea></label><label>Underlying causes discussed or documented<textarea name="packet.labCauses" rows="3"></textarea></label></section>
     <section id="case-equipment" class="case-section"><h3>Ventilator, respiratory support &amp; monitoring</h3>
       <h4>Mechanical ventilator settings</h4><div class="case-grid"><label>FiO₂<input name="packet.vent.fio2"></label><label>Ventilation rate<input name="packet.vent.rate"></label><label>Tidal volume<input name="packet.vent.tidalVolume"></label><label>PEEP<input name="packet.vent.peep"></label><label>PEEP used?<select name="packet.vent.peepUsed"><option value="">Choose</option><option>Yes</option><option>No</option></select></label><label>Ventilator setting<select name="packet.vent.mode"><option value="">Choose</option><option>Control</option><option>Assist Control</option><option>SIMV</option><option>Other</option><option>Not applicable</option></select></label><label>Other ventilator setting<input name="packet.vent.modeOther"></label><label>Other respiratory device(s)<input name="packet.vent.otherDevices" placeholder="CPAP, BIPAP, or other"></label></div><label>Ventilator / respiratory comments<textarea name="packet.vent.comments" rows="3"></textarea></label><label>Changes in respiratory status documented<textarea name="packet.vent.statusChanges" rows="3"></textarea></label>
       <h4>Critical care monitoring devices</h4><p class="case-help">Record device, rationale, invasive status, and alarm limits as observed or documented.</p><div class="case-table-scroll"><table class="case-table case-monitor-table"><thead><tr><th>Monitoring device</th><th>Rationale</th><th>Invasive?</th><th>Low alarm settings</th><th>High alarm settings</th></tr></thead><tbody id="case-monitor-rows"></tbody></table></div>
@@ -1136,16 +1134,9 @@ body.sicu-present>header,body.sicu-present .help,body.sicu-present .tag,body.sic
       localStorage.setItem(key,JSON.stringify({values,medicationCount:scenario.meds.length,seedVersion:2}));
     }
   }
-  document.getElementById('case-load-sample')?.addEventListener('click',()=>{
-    const scenario=scenarios.find(item=>item.slot===picker.value);if(!scenario)return;
-    if(!window.confirm('Replace this fictional scenario record with the current sample? Any edits saved in this record will be replaced.'))return;
-    const values={...scenario.values};scenario.vitals.forEach((row,r)=>row.forEach((value,c)=>{values[`vitals.row${r}.${c}`]=value;}));
-    scenario.meds.forEach((med,index)=>['classification','drug','pump','pumpReason','dosageDuration','reason'].forEach((field,column)=>values[`medications.${index}.${field}`]=med[column]));
-    localStorage.setItem(`sicuCasePacketPatient${scenario.slot}`,JSON.stringify({values,medicationCount:scenario.meds.length,seedVersion:2}));window.location.reload();
-  });
   picker.addEventListener('change',()=>{const diagnosis=document.getElementById('sicu-diagnosis-select');if(diagnosis)diagnosis.disabled=picker.value==='5';if(picker.value==='5')window.sicu?.setDiagnosis('dka');else if(window.sicu?.scenario?.id==='dka')window.sicu.setDiagnosis('septicShock');});
   document.getElementById('sicu-diagnosis-select')?.addEventListener('change',event=>{if(event.target.value==='dka'&&picker.value!=='5'){picker.value='5';picker.dispatchEvent(new Event('change'));}});
-  if(!document.getElementById('case-scenario-note')){const note=document.createElement('p');note.id='case-scenario-note';note.className='case-note';note.textContent='Sample packet vitals are fixed; live room vitals are separate. Selecting DKA activates its simulator safety gate. Samples do not create clinical orders.';document.querySelector('.case-note')?.after(note);}
+
 })();
 </script>
 
@@ -1181,6 +1172,29 @@ body[data-room-failed="true"] #sicu-panel-shortcuts{bottom:10px!important}
 @media(max-width:700px){#sicu-interventions{left:10px!important;right:10px!important;bottom:68px!important;width:auto!important;max-height:min(45dvh,360px)!important}#sicu-event-panel{left:10px!important;right:10px!important;top:60px!important;width:auto!important;max-height:38dvh;overflow:auto}#sicu-panel-shortcuts{left:10px;bottom:10px}.case-more-tabs{position:sticky;top:44px;z-index:5;background:#f7f7f3}}
 @media(max-width:700px){body[data-room-failed="true"] #loading:not(.hidden){top:calc(env(safe-area-inset-top) + 8px)!important;left:8px!important;right:8px!important;min-height:34px;padding:5px 8px;font-size:11px}body[data-room-failed="true"] #loading b{display:none}body[data-room-failed="true"] #sicu-clock{top:52px!important;left:8px!important;right:8px!important;justify-content:center}body[data-room-failed="true"] #sicu-fallback-actions{left:8px;right:8px;top:104px;gap:4px;justify-content:space-between}body[data-room-failed="true"] #sicu-fallback-actions>button{min-height:38px;padding:6px 7px;font-size:10px}body[data-room-failed="true"] #sicu-monitor{top:150px!important;left:8px!important;right:8px!important;width:auto!important}body[data-room-failed="true"] #sicu-event-panel{top:206px!important;left:8px!important;right:8px!important;width:auto!important;max-height:34dvh}body[data-room-failed="true"] #sicu-interventions{left:8px!important;right:8px!important;bottom:58px!important;max-height:38dvh!important}body[data-room-failed="true"] #sicu-panel-shortcuts{left:8px!important;bottom:8px!important}}
 @media(max-height:500px) and (orientation:landscape){body[data-room-failed="true"] #sicu-fallback-actions{top:104px}body[data-room-failed="true"] #sicu-monitor{top:150px!important}body[data-room-failed="true"] #sicu-event-panel{top:206px!important;max-height:28dvh}body[data-room-failed="true"] #sicu-interventions{max-height:32dvh!important}}
+</style>
+<style id="sicu-phone-cleanup">
+@media(max-width:700px){
+  header{top:calc(env(safe-area-inset-top) + 6px);left:12px;right:12px;text-align:center}
+  header h1{font-size:16px;line-height:1.2}
+  header .number{display:none}
+  header p{margin:2px 0 0;font-size:9px;letter-spacing:.04em}
+  .help{display:none!important}
+  .toolbar{left:8px;right:8px;bottom:8px;width:auto;max-width:none;transform:none;justify-content:space-between;gap:0;padding:2px 4px;overflow:visible}
+  .toolbar button{flex:0 1 auto;padding:8px 4px;font-size:10px}
+  .toolbar .separator{display:none}
+  #sicu-assessment-toggle{left:8px!important;top:48px!important;transform:none!important;padding:7px 8px!important;font-size:11px}
+  #sicu-report-toggle{left:50%!important;right:auto!important;top:48px!important;transform:translateX(-50%)!important;padding:7px 9px!important;font-size:11px}
+  #sicu-present-toggle{right:8px!important;left:auto!important;top:48px!important;transform:none!important;padding:7px 8px!important;font-size:11px}
+  #sicu-clock{top:88px!important;left:50%!important;right:auto!important;transform:translateX(-50%);padding:3px 8px!important}
+  #sicu-time{font-size:14px!important;margin:0!important}
+  #sicu-monitor{left:12px!important;right:12px!important;bottom:112px!important;width:auto!important}
+  #sicu-panel-shortcuts{left:50%!important;right:auto!important;bottom:58px!important;transform:translateX(-50%);justify-content:center}
+  #sicu-interventions{bottom:104px!important}
+  #sicu-event-panel{top:132px!important;left:8px!important;right:8px!important;width:auto!important;max-height:38dvh;overflow:auto}
+  body[data-room-failed="true"] #sicu-clock{transform:none!important;top:52px!important;left:8px!important;right:8px!important;justify-content:center!important}
+  body[data-room-failed="true"] #sicu-panel-shortcuts{left:8px!important;right:8px!important;bottom:8px!important;transform:none!important;justify-content:center!important;gap:8px}
+}
 </style>
 <div id="sicu-panel-shortcuts" aria-label="Room panels"><button type="button" id="sicu-controls-shortcut" aria-expanded="false">Controls</button><button type="button" id="sicu-events-shortcut" aria-expanded="false">Events</button></div>
 <nav id="sicu-fallback-actions" aria-label="Simulator panels" hidden></nav>
