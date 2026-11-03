@@ -714,7 +714,7 @@ try {
   <div id="sicu-report-status" role="status" aria-live="polite" style="font:11px ui-monospace,monospace;color:#59625a;margin-top:8px"></div>
 </aside>
 <style>
-#sicu-assessment-rows{display:flex;flex-direction:column;gap:7px}.sicu-assessment-row{border-top:1px solid #e5e7e2;padding:9px 0 3px}.sicu-assessment-row h3{font-size:12px;font-weight:600;margin:0 0 5px;color:#303732}.sicu-assessment-values,.sicu-assessment-draft,.sicu-assessment-unmodeled{font-size:11px;line-height:1.5;margin:3px 0;color:#515750}.sicu-assessment-draft{font-weight:550;color:#89522d}.sicu-assessment-plan{display:block;width:100%;min-height:42px;resize:vertical;margin:6px 0 0;padding:7px 8px;border:1px solid #d9ddd6;border-radius:7px;background:#fff;color:#292b2b;font:11px/1.45 Arial,sans-serif}.sicu-assessment-plan::placeholder{color:#8a8e88}
+#sicu-assessment-rows{display:flex;flex-direction:column;gap:7px}.sicu-assessment-row{border-top:1px solid #e5e7e2;padding:9px 0 3px}.sicu-assessment-row h3{font-size:12px;font-weight:600;margin:0 0 5px;color:#303732}.sicu-assessment-values,.sicu-assessment-draft{font-size:11px;line-height:1.5;margin:3px 0;color:#515750}.sicu-assessment-draft{font-weight:550;color:#89522d}.sicu-assessment-plan{display:block;width:100%;min-height:42px;resize:vertical;margin:6px 0 0;padding:7px 8px;border:1px solid #d9ddd6;border-radius:7px;background:#fff;color:#292b2b;font:11px/1.45 Arial,sans-serif}.sicu-assessment-plan::placeholder{color:#8a8e88}
 body.sicu-present>header,body.sicu-present .help,body.sicu-present .tag,body.sicu-present .toolbar,body.sicu-present #sicu-clock{display:none!important}body.sicu-present #sicu-assessment-toggle{display:none!important}body.sicu-present #sicu-present-toggle{right:20px;top:16px;background:#fff;box-shadow:0 3px 18px #0002}body.sicu-present #sicu-interventions,body.sicu-present #sicu-event-panel{display:none!important}body.sicu-present #sicu-assessment-panel{display:block!important;inset:10px!important;width:auto!important;bottom:10px!important;max-height:none!important;border-radius:8px;padding:20px 24px 28px 24px;z-index:10}body.sicu-present #sicu-monitor{display:block!important;width:min(510px,44vw)!important;right:22px!important;bottom:22px!important;z-index:12;border-width:6px!important;box-shadow:0 12px 34px #0004!important}
 @media(max-width:700px){#sicu-assessment-toggle{left:10px!important;top:112px!important}#sicu-present-toggle{right:12px!important;top:12px!important}#sicu-assessment-panel{left:8px!important;top:158px!important;bottom:8px!important;width:calc(100vw - 16px)!important}.sicu-present #sicu-assessment-panel{inset:6px!important;padding:16px!important}.sicu-present #sicu-monitor{width:min(360px,70vw)!important;right:10px!important;bottom:10px!important}}
 </style>
@@ -749,11 +749,9 @@ body.sicu-present>header,body.sicu-present .help,body.sicu-present .tag,body.sic
     const title = document.createElement('h3'); title.textContent = system.name;
     const values = document.createElement('p'); values.className = 'sicu-assessment-values';
     const draft = document.createElement('p'); draft.className = 'sicu-assessment-draft'; draft.hidden = true;
-    const unmodeled = document.createElement('p'); unmodeled.className = 'sicu-assessment-unmodeled'; unmodeled.hidden = true;
-    unmodeled.textContent = 'not yet modeled';
     const plan = document.createElement('textarea'); plan.className = 'sicu-assessment-plan'; plan.setAttribute('aria-label', `${system.name} plan notes`); plan.setAttribute('spellcheck','true');
-    row.append(title,values,draft,unmodeled,plan); rowsRoot.appendChild(row);
-    rowElements.set(system.name,{values,draft,unmodeled,plan});
+    row.append(title,values,draft,plan); rowsRoot.appendChild(row);
+    rowElements.set(system.name,{values,draft,plan});
   }
   function eventMessages() {
     return [...document.querySelectorAll('#sicu-event-list li')].map(item => item.textContent.trim());
@@ -803,7 +801,6 @@ body.sicu-present>header,body.sicu-present .help,body.sicu-present .tag,body.sic
       const modeled = content[system.name];
       elements.values.textContent = modeled || '';
       elements.values.hidden = !modeled;
-      elements.unmodeled.hidden = Boolean(modeled);
       const lines = state.assessments[system.name] || [];
       elements.draft.textContent = lines.length ? `Educational assessment: ${lines.join('; ')}` : '';
       elements.draft.hidden = !lines.length;
