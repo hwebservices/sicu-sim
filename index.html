@@ -844,9 +844,10 @@ body.sicu-present>header,body.sicu-present .help,body.sicu-present .tag,body.sic
 </script>
 <!-- Case presentation: documentation-only fields and a printable encounter summary. -->
 <button id="case-toggle" type="button" aria-expanded="false" style="position:fixed;left:28px;top:174px;z-index:7;padding:9px 13px;background:#fffffff2;border:1px solid #e0e2dc">Case presentation</button>
-<main id="case-panel" aria-label="Case presentation form" hidden>
-  <div class="case-top"><div><p class="case-kicker">SICU / DOCUMENTATION</p><h2>Encounter presentation</h2></div><div class="case-top-actions"><label class="case-patient-picker">Patient record<select id="case-patient-slot" aria-label="Patient record"><option value="1">Patient 1</option><option value="2">Patient 2</option></select></label><span id="case-save-status" role="status">Saved on this device</span><button id="case-print" type="button">Print report</button><button id="case-close" type="button" aria-label="Hide case form">Hide form</button></div></div>
+<main id="case-panel" role="dialog" aria-modal="true" aria-labelledby="case-panel-title" aria-label="Case presentation form" hidden>
+  <div class="case-top"><div><p class="case-kicker">SICU / DOCUMENTATION</p><h2 id="case-panel-title" tabindex="-1">Encounter presentation</h2></div><div class="case-top-actions"><label class="case-patient-picker">Patient record<select id="case-patient-slot" aria-label="Patient record"><option value="1">Patient 1</option><option value="2">Patient 2</option></select></label><span id="case-save-status" role="status">Saved on this device</span><button id="case-print" type="button">Print report</button><button id="case-close" type="button" aria-label="Hide case form">Hide form</button></div></div>
   <p class="case-note">Documentation workspace · Entries autosave locally in this browser on this device. Do not enter patient names or identifying prehospital provider information.</p>
+  <p id="case-scenario-notice" class="case-scenario-notice" role="status" aria-live="polite"></p>
   <nav id="case-mobile-tabs" class="case-mobile-tabs" role="tablist" aria-label="Patient documentation tabs"></nav>
   <nav class="case-nav" aria-label="Case sections"><a href="#case-encounter">Encounter</a><a href="#case-vitals">Vitals timeline</a><a href="#case-medications">Medication record</a><a href="#case-presentation">Presentation</a></nav>
   <form id="case-form">
@@ -887,7 +888,31 @@ body.sicu-present>header,body.sicu-present .help,body.sicu-present .tag,body.sic
 <article id="case-print-report" aria-label="Printable encounter report"></article>
 <style>
 #case-panel{position:fixed;z-index:11;inset:12px 12px 12px 12px;overflow:auto;padding:22px 26px 48px;background:#f7f7f3;color:#292b2b;border:1px solid #dedfd9;border-radius:12px;box-shadow:0 8px 36px #20231e2a;font:13px/1.5 Arial,sans-serif}#case-panel[hidden]{display:none}.case-top,.case-heading-row{display:flex;align-items:center;justify-content:space-between;gap:12px}.case-top h2{font-size:22px;font-weight:550;margin:0}.case-kicker{font-size:10px;letter-spacing:.14em;color:#8c6546;margin:0 0 5px}.case-note,.case-help{font-size:12px;color:#6c716c}.case-nav{display:flex;gap:18px;padding:12px 0;border-bottom:1px solid #dedfd9;position:sticky;top:-22px;background:#f7f7f3;z-index:2}.case-nav a{color:#536a66;font-size:12px}.case-section{padding:20px 0;border-bottom:1px solid #dedfd9;scroll-margin-top:55px}.case-section h3{font-size:16px;font-weight:550;margin:0 0 12px}.case-section h4{font-size:13px;margin:18px 0 10px}.case-grid{display:grid;grid-template-columns:repeat(4,minmax(150px,1fr));gap:12px}.case-grid-wide{grid-template-columns:repeat(2,minmax(220px,1fr));margin-top:12px}.case-section label{display:flex;flex-direction:column;gap:5px;font-size:11px;color:#555d57}.case-section input,.case-section textarea{width:100%;padding:8px 9px;border:1px solid #d6dad3;border-radius:6px;background:#fff;color:#292b2b;font:12px/1.45 Arial,sans-serif}.case-section textarea{resize:vertical}.case-table-scroll{overflow:auto}.case-table{border-collapse:collapse;min-width:1600px;width:100%;font-size:11px}.case-table th,.case-table td{padding:6px;border-bottom:1px solid #dfe2dc;text-align:left;vertical-align:top}.case-table th{position:sticky;top:0;background:#eceee8;font-weight:550}.case-table td:first-child{font-weight:600;min-width:145px}.case-table input,.case-table textarea{min-width:78px;padding:6px;border:1px solid #d6dad3;border-radius:5px;font:11px Arial,sans-serif}.case-table textarea{min-width:145px;min-height:42px}.case-med-row{display:grid;grid-template-columns:1fr 1.2fr 1fr 1fr 1.2fr auto;gap:8px;align-items:end;padding:12px 0;border-top:1px solid #e0e2dc}.case-med-row label{font-size:10px}.case-med-row input,.case-med-row textarea{min-width:0;width:100%;padding:7px;border:1px solid #d6dad3;border-radius:5px;font:11px Arial,sans-serif}#case-print-report{display:none}
+.case-scenario-notice{display:none}
 @media(max-width:800px){#case-panel{inset:6px;padding:16px 14px 36px}.case-grid{grid-template-columns:repeat(2,minmax(130px,1fr))}.case-med-row{grid-template-columns:repeat(2,minmax(130px,1fr))}.case-nav{gap:12px;overflow:auto;white-space:nowrap}.case-top h2{font-size:19px}}
+@media(max-width:700px),(max-height:500px){
+  #case-panel{inset:0;width:100vw;height:100vh;height:100dvh;max-height:none;display:flex;flex-direction:column;gap:0;overflow:hidden;overscroll-behavior:contain;padding:calc(10px + env(safe-area-inset-top)) calc(12px + env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)) calc(12px + env(safe-area-inset-left));border:0;border-radius:0;background:#f7f7f3;box-shadow:none;z-index:1000}
+  #case-panel[hidden]{display:none}
+  .case-top{position:static;display:flex;flex-direction:column;align-items:stretch;gap:6px;flex:0 0 auto;padding:0 0 8px;background:#f7f7f3;z-index:auto}
+  .case-top h2{font-size:18px}
+  .case-top-actions{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:6px;width:100%}
+  .case-patient-picker{grid-column:1/-1;justify-content:space-between;gap:8px;font-size:12px}
+  .case-patient-picker select{width:min(68%,230px);max-width:none;min-height:44px;font-size:16px}
+  #case-save-status{grid-column:auto;min-width:0;min-height:18px;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .case-top-actions button{min-height:44px;padding:8px 10px;white-space:nowrap}
+  .case-note{flex:0 0 auto;max-height:18vh;overflow:auto;margin:0;padding:4px 0 8px;font-size:11px;line-height:1.4}
+  .case-scenario-notice{display:block;flex:0 0 auto;margin:0 0 6px;padding:7px 9px;border-left:3px solid #9b6536;background:#f0eee6;color:#4d514b;font-size:11px;line-height:1.35}
+  .case-mobile-tabs{position:static;display:flex;flex:0 0 auto;gap:5px;margin:0;padding:4px 0 7px;overflow-x:auto;overscroll-behavior-x:contain;background:#f7f7f3;border-bottom:1px solid #dedfd9;scrollbar-width:thin}
+  .case-mobile-tabs button{flex:0 0 auto;min-height:44px;padding:8px 11px;border:1px solid #ccd2ca;border-radius:8px;background:#fff;color:#34463e;font:600 12px Arial,sans-serif}
+  .case-mobile-tabs button[aria-selected="true"]{background:#304d43;color:#fff;border-color:#304d43}
+  .case-nav{display:none}
+  .case-grid,.case-grid-wide{grid-template-columns:minmax(0,1fr);gap:9px}
+  .case-med-row{grid-template-columns:minmax(0,1fr);gap:8px}
+  .case-section input,.case-section textarea,.case-section select,.case-med-row input{min-height:44px;font-size:16px}
+  .case-section textarea{min-height:72px}
+  #case-form{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;scroll-padding-block:12px;padding-bottom:calc(14px + env(safe-area-inset-bottom));-webkit-overflow-scrolling:touch}
+}
+@media(max-width:700px) and (orientation:landscape),(max-height:500px) and (orientation:landscape){#case-panel{width:100vw;inset:0;border-radius:0;padding-top:calc(6px + env(safe-area-inset-top));padding-bottom:calc(6px + env(safe-area-inset-bottom))}.case-top{flex-direction:row;align-items:center;gap:10px;padding-bottom:4px}.case-top h2{font-size:16px}.case-top-actions{display:flex;flex:0 1 auto;flex-wrap:wrap;justify-content:flex-end;gap:5px;width:auto}.case-patient-picker{grid-column:auto;justify-content:flex-start;gap:5px;font-size:11px}.case-patient-picker select{width:128px;max-width:128px;min-height:44px}.case-top-actions button{min-height:44px;padding:7px 9px}.case-note{max-height:14vh;padding:2px 0 5px;font-size:10px}.case-scenario-notice{margin-bottom:3px;padding:5px 8px}.case-mobile-tabs{padding:2px 0 5px}}
 @media print{@page{margin:14mm}body>*:not(#case-print-report){display:none!important}#case-print-report{display:block!important;color:#111;font:10pt/1.45 Arial,sans-serif}#case-print-report h1{font-size:20pt;margin:0 0 3mm}#case-print-report h2{font-size:14pt;margin:7mm 0 2mm;border-bottom:1px solid #777;padding-bottom:1mm}#case-print-report h3{font-size:11pt;margin:4mm 0 1mm}#case-print-report p{margin:1mm 0;white-space:pre-wrap}#case-print-report table{border-collapse:collapse;width:100%;font-size:7pt}#case-print-report th,#case-print-report td{border:1px solid #aaa;padding:2px;text-align:left;vertical-align:top}}
 </style>
 <script>
@@ -901,8 +926,25 @@ body.sicu-present>header,body.sicu-present .help,body.sicu-present .tag,body.sic
   const medList=document.getElementById('case-med-list');
   function addMedication(){const row=document.createElement('div');row.className='case-med-row';[['Drug classification','classification'],['Medication','drug'],['Infusion pump used','pump'],['Why this pump','pumpReason'],['Dosage / duration','dosageDuration'],['Reason needed','reason']].forEach(([label,key])=>{const wrap=document.createElement('label');wrap.textContent=label;const el=document.createElement('input');el.name=`medications.${medList.children.length}.${key}`;el.placeholder=label;wrap.append(el);row.append(wrap);});const remove=document.createElement('button');remove.type='button';remove.textContent='Remove';remove.addEventListener('click',()=>row.remove());row.append(remove);medList.append(row);}
   document.getElementById('case-add-med').addEventListener('click',addMedication);addMedication();
-  function open(){panel.hidden=false;toggle.setAttribute('aria-expanded','true');}
-  toggle.addEventListener('click',open);document.getElementById('case-close').addEventListener('click',()=>{panel.hidden=true;toggle.setAttribute('aria-expanded','false');});
+  const closeButton=document.getElementById('case-close');
+  const scenarioNotice=document.getElementById('case-scenario-notice');
+  const scenarioLabel=document.getElementById('sicu-scenario-label');
+  const simulatorNotice=document.getElementById('sicu-intervention-chip');
+  function syncScenarioNotice(){const message=simulatorNotice?.textContent?.trim();const visible=simulatorNotice&&getComputedStyle(simulatorNotice).display!=='none'&&getComputedStyle(simulatorNotice).opacity!=='0';scenarioNotice.textContent=visible&&message?message:(scenarioLabel?.textContent?.trim()||'Educational simulation · Not clinically validated');}
+  if(scenarioLabel)new MutationObserver(syncScenarioNotice).observe(scenarioLabel,{childList:true,subtree:true,characterData:true});
+  if(simulatorNotice)new MutationObserver(syncScenarioNotice).observe(simulatorNotice,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['style']});
+  function open(){syncScenarioNotice();panel.hidden=false;toggle.setAttribute('aria-expanded','true');document.getElementById('case-panel-title').focus();}
+  function close(){panel.hidden=true;toggle.setAttribute('aria-expanded','false');toggle.focus();}
+  toggle.addEventListener('click',open);closeButton.addEventListener('click',close);
+  panel.addEventListener('keydown',event=>{
+    if(event.key==='Escape'){event.preventDefault();close();return;}
+    if(event.key!=='Tab')return;
+    const items=[...panel.querySelectorAll('a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])')].filter(el=>el.getClientRects().length);
+    if(!items.length)return;
+    const last=items[items.length-1];
+    if(event.shiftKey&&(document.activeElement===items[0]||document.activeElement.id==='case-panel-title')){event.preventDefault();last.focus();}
+    else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();items[0].focus();}
+  });
   function syncLiveVitals(){const v=window.sicu?.vitals;if(!v)return;const today=vitalsBody.rows[3];const values={1:(v.nibpDia+(v.nibpSys-v.nibpDia)/3).toFixed(1),2:`${Math.round(v.nibpSys)}/${Math.round(v.nibpDia)}`,3:Math.round(v.rr),4:Math.round(v.hr),6:Number(v.temp).toFixed(1),8:Math.round(v.spo2)};for(const [index,value] of Object.entries(values))today.cells[Number(index)+1].querySelector('input').value=value;}
   function field(name){return form.elements.namedItem(name)?.value.trim()||'—';}
   function textField(label,name){return `<h3>${label}</h3><p>${escapeHtml(field(name))}</p>`;}
@@ -925,8 +967,8 @@ body.sicu-present>header,body.sicu-present .help,body.sicu-present .tag,body.sic
   const tabRoot=document.getElementById('case-mobile-tabs');
   const tabButtons=new Map();
   for(const [id,title] of tabs){const button=document.createElement('button');button.type='button';button.role='tab';button.textContent=title;button.setAttribute('aria-controls',id);button.setAttribute('aria-selected','false');button.addEventListener('click',()=>activateTab(id));tabRoot.append(button);tabButtons.set(id,button);}
-  function activateTab(id){panel.dataset.activeTab=id;const mobile=matchMedia('(max-width: 700px)').matches;for(const section of form.querySelectorAll(':scope > .case-section'))section.hidden=mobile&&section.id!==id;for(const [key,button] of tabButtons)button.setAttribute('aria-selected',String(key===id));if(mobile)panel.scrollTop=0;}
-  function resizeTabs(){const mobile=matchMedia('(max-width: 700px)').matches;if(mobile)activateTab(panel.dataset.activeTab||'case-encounter');else{for(const section of form.querySelectorAll(':scope > .case-section'))section.hidden=false;for(const button of tabButtons.values())button.setAttribute('aria-selected','false');}}
+  function activateTab(id){panel.dataset.activeTab=id;const mobile=matchMedia('(max-width: 700px), (max-height: 500px)').matches;for(const section of form.querySelectorAll(':scope > .case-section'))section.hidden=mobile&&section.id!==id;for(const [key,button] of tabButtons)button.setAttribute('aria-selected',String(key===id));if(mobile)form.scrollTop=0;}
+  function resizeTabs(){const mobile=matchMedia('(max-width: 700px), (max-height: 500px)').matches;if(mobile)activateTab(panel.dataset.activeTab||'case-encounter');else{for(const section of form.querySelectorAll(':scope > .case-section'))section.hidden=false;for(const button of tabButtons.values())button.setAttribute('aria-selected','false');}}
   window.addEventListener('resize',resizeTabs);resizeTabs();
 
   const labs={
