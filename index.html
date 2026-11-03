@@ -910,6 +910,21 @@ body.sicu-present>header,body.sicu-present .help,body.sicu-present .tag,body.sic
 <main id="case-panel" role="dialog" aria-modal="true" aria-labelledby="case-panel-title" aria-label="Case presentation form" hidden>
   <header class="case-flow-header"><div class="case-flow-title"><p class="case-kicker">SICU / DOCUMENTATION</p><h2 id="case-panel-title" tabindex="-1">Encounter presentation</h2></div><div class="case-top-actions"><label class="case-patient-picker">Patient record<select id="case-patient-slot" aria-label="Patient record"><option value="1">Patient 1</option><option value="2">Patient 2</option></select></label><span id="case-save-status" role="status" aria-live="polite">Saved on this device</span><button id="case-print" type="button">Print report</button><button id="case-close-x" type="button" aria-label="Close form">×</button><button id="case-close" type="button">Back to room</button></div></header>
   <p class="case-note">Fictional teaching data only; never enter real patient information.</p>
+  <details id="case-cloud-sync" style="margin:8px 0;padding:8px 10px;border:1px solid #c8d2cd;border-radius:8px;background:#fff">
+    <summary style="cursor:pointer;font-weight:600;min-height:44px;display:flex;align-items:center">Private cloud sync</summary>
+    <p class="case-help">Owner-only sync for fictional teaching drafts. Existing local drafts stay on this device until you explicitly save or enable automatic sync for that record.</p>
+    <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px">
+      <button id="case-cloud-signin" type="button">Sign in with Google</button>
+      <button id="case-cloud-signout" type="button" hidden>Sign out</button>
+      <button id="case-cloud-check" type="button" disabled>Check cloud copy</button>
+      <button id="case-cloud-upload" type="button" disabled>Save current draft</button>
+      <button id="case-cloud-download" type="button" disabled>Load cloud draft</button>
+      <button id="case-cloud-replace" type="button" disabled hidden>Replace cloud draft</button>
+    </div>
+    <label style="display:flex;align-items:flex-start;gap:8px;margin:9px 0;font-size:12px"><input id="case-cloud-fictional" type="checkbox">I confirm this selected record contains fictional teaching data only and no real patient information or identifiers.</label>
+    <label style="display:flex;align-items:flex-start;gap:8px;margin:9px 0;font-size:12px"><input id="case-cloud-autosync" type="checkbox" disabled>Automatically save edits to my private account and safely restore newer cloud edits on this device.</label>
+    <p id="case-cloud-status" role="status" aria-live="polite" class="case-help">Local autosave is active. Sign in to check for a private cloud copy.</p>
+  </details>
   <p class="case-student-lock-notice">Student mode · Observation only. Pump-based medications/fluids and ventilator settings are locked; oxygen interface is visual-only.</p>
   <p id="case-scenario-notice" class="case-scenario-notice" role="status" aria-live="polite"></p>
   <nav id="case-mobile-tabs" class="case-mobile-tabs" role="tablist" aria-label="Patient documentation tabs"></nav>
@@ -993,8 +1008,8 @@ body.sicu-present>header,body.sicu-present .help,body.sicu-present .tag,body.sic
   function inputCell(name,label){const td=document.createElement('td');const el=label.includes('note')?document.createElement('textarea'):document.createElement('input');el.name=`vitals.${name}`;el.setAttribute('aria-label',`${label} · ${name}`);if(label==='Time')el.placeholder='Time';else el.placeholder='—';td.append(el);return td;}
   labels.forEach((label,index)=>{const tr=document.createElement('tr'),th=document.createElement('td');tr.className='case-vital-row';th.textContent=label;th.className='case-timepoint';tr.append(th);columns.forEach((column,i)=>{const td=inputCell(`row${index}.${i}`,column);td.dataset.label=column;if(index===3&&['MAP','BP','RR','HR','Temp','SpO2'].includes(column)){const value=td.querySelector('input');value.readOnly=true;value.setAttribute('aria-readonly','true');value.title='Linked to current simulator state';}tr.append(td);});vitalsBody.append(tr);});
   const medList=document.getElementById('case-med-list');
-  function addMedication(){const row=document.createElement('div');row.className='case-med-row';[['Drug classification','classification'],['Medication','drug'],['Infusion pump used','pump'],['Why this pump','pumpReason'],['Dosage / duration','dosageDuration'],['Reason needed','reason']].forEach(([label,key])=>{const wrap=document.createElement('label');wrap.textContent=label;const el=document.createElement('input');el.name=`medications.${medList.children.length}.${key}`;el.placeholder=label;wrap.append(el);row.append(wrap);});const remove=document.createElement('button');remove.type='button';remove.textContent='Remove';remove.addEventListener('click',()=>row.remove());row.append(remove);medList.append(row);}
-  document.getElementById('case-add-med').addEventListener('click',addMedication);addMedication();
+  function addMedication(){const row=document.createElement('div');row.className='case-med-row';[['Drug classification','classification'],['Medication','drug'],['Infusion pump used','pump'],['Why this pump','pumpReason'],['Dosage / duration','dosageDuration'],['Reason needed','reason']].forEach(([label,key])=>{const wrap=document.createElement('label');wrap.textContent=label;const el=document.createElement('input');el.name=`medications.${medList.children.length}.${key}`;el.placeholder=label;wrap.append(el);row.append(wrap);});const remove=document.createElement('button');remove.type='button';remove.textContent='Remove';remove.addEventListener('click',event=>{row.remove();if(event.isTrusted)form.dispatchEvent(new Event('input',{bubbles:true}));});row.append(remove);medList.append(row);}
+  document.getElementById('case-add-med').addEventListener('click',event=>{addMedication();if(event.isTrusted)form.dispatchEvent(new Event('input',{bubbles:true}));});addMedication();
   const closeButton=document.getElementById('case-close');
   const scenarioNotice=document.getElementById('case-scenario-notice');
   const scenarioLabel=document.getElementById('sicu-scenario-label');
@@ -1118,14 +1133,14 @@ body.sicu-present>header,body.sicu-present .help,body.sicu-present .tag,body.sic
   for(let i=0;i<5;i++){const tr=document.createElement('tr');const device=document.createElement('td');device.textContent=`Device ${i+1}`;device.className='case-timepoint';tr.append(device);for(const [key,label] of [['device','Monitoring device'],['rationale','Rationale'],['invasive','Invasive?'],['low','Low alarm settings'],['high','High alarm settings']]){const td=document.createElement('td');td.dataset.label=label;let control;if(key==='invasive'){control=document.createElement('select');control.innerHTML='<option value="">Choose</option><option>Yes</option><option>No</option>'; }else{control=document.createElement('input');control.placeholder=label;}control.name=`packet.monitoring.${i}.${key}`;control.dataset.printLabel=`${label} · device ${i+1}`;td.append(control);tr.append(td);}monitorBody.append(tr);}
 
   const patientNumber=form.querySelector('[name="packet.patientNumber"]');
-  const storageKey=n=>`sicuCasePacketPatient${n}`;let currentPatient='1',currentSeedVersion=null,saveTimer=0;
-  function writeRecordNow(){try{const values={};for(const el of form.elements)if(el.name)values[el.name]=el.value;const record={values,medicationCount:medList.children.length};if(currentSeedVersion!==null)record.seedVersion=currentSeedVersion;localStorage.setItem(storageKey(currentPatient),JSON.stringify(record));status.textContent='Saved on this device';return true;}catch{status.textContent='Local autosave unavailable';return false;}}
-  function saveRecord(){clearTimeout(saveTimer);status.textContent='Saving…';saveTimer=setTimeout(()=>{saveTimer=0;writeRecordNow();},250);}
-  function flushRecord(){clearTimeout(saveTimer);saveTimer=0;return writeRecordNow();}
+  const storageKey=n=>`sicuCasePacketPatient${n}`,editTimeKey=n=>`sicuCasePacketEditedAt${n}`;let currentPatient='1',currentSeedVersion=null,saveTimer=0,pendingEdited=false,pendingEditAt=0;
+  function writeRecordNow({edited=false,editedAt=Date.now()}={}){try{const values={};for(const el of form.elements)if(el.name)values[el.name]=el.value;const record={values,medicationCount:medList.children.length};if(currentSeedVersion!==null)record.seedVersion=currentSeedVersion;localStorage.setItem(storageKey(currentPatient),JSON.stringify(record));status.textContent='Saved on this device';if(edited){try{localStorage.setItem(editTimeKey(currentPatient),String(editedAt));}catch{}try{window.dispatchEvent(new CustomEvent('sicu-local-draft-changed',{detail:{slot:currentPatient,record,editedAt}}));}catch{}}return true;}catch{status.textContent='Local autosave unavailable';return false;}}
+  function saveRecord(edited=true){clearTimeout(saveTimer);if(edited){pendingEdited=true;pendingEditAt=Date.now();}status.textContent='Saving…';saveTimer=setTimeout(()=>{saveTimer=0;const isEdited=pendingEdited,editedAt=pendingEditAt;pendingEdited=false;pendingEditAt=0;writeRecordNow({edited:isEdited,editedAt});},250);}
+  function flushRecord(){clearTimeout(saveTimer);saveTimer=0;const isEdited=pendingEdited,editedAt=pendingEditAt;pendingEdited=false;pendingEditAt=0;return writeRecordNow({edited:isEdited,editedAt});}
   function restoreRenamedLabKeys(values){const restored={...values};for(const suffix of ['value','reference']){const original=`packet.lab.hematology-coagulation.platelet-count-plt.${suffix}`,renamed=`packet.lab.hematology-coagulation.platelet-count.${suffix}`;if(!Object.prototype.hasOwnProperty.call(restored,original)&&Object.prototype.hasOwnProperty.call(restored,renamed))restored[original]=restored[renamed];}return restored;}
   function loadRecord(n){form.reset();medList.replaceChildren();addMedicationButton.click();currentPatient=n;patientNumber.value=n;let saved=null;try{saved=JSON.parse(localStorage.getItem(storageKey(n))||'null');}catch{}currentSeedVersion=saved?.seedVersion??null;if(saved){for(let i=1;i<Math.min(saved.medicationCount||1,20);i++)addMedicationButton.click();const recordValues=restoreRenamedLabKeys(saved.values||{});for(const [name,value] of Object.entries(recordValues)){const el=form.elements.namedItem(name);if(el&&'value'in el)el.value=value;}}patientNumber.value=n;status.textContent=saved?'Draft restored from this device':'New local draft';}
-  window.sicuCaseDraftController={flush:flushRecord,replaceFromCloud(n,record){if(currentPatient!==String(n))throw new Error('record-selection-changed');if(saveTimer!==0){clearTimeout(saveTimer);saveTimer=0;if(!writeRecordNow())throw new Error('local-save-failed');}if(currentPatient!==String(n))throw new Error('record-selection-changed');localStorage.setItem(storageKey(n),JSON.stringify(record));loadRecord(String(n));}};
-  slot.addEventListener('change',()=>{saveRecord();setTimeout(()=>loadRecord(slot.value),300);});
+  window.sicuCaseDraftController={flush:flushRecord,replaceFromCloud(n,record){if(currentPatient!==String(n))throw new Error('record-selection-changed');if(saveTimer!==0){clearTimeout(saveTimer);saveTimer=0;const isEdited=pendingEdited,editedAt=pendingEditAt;pendingEdited=false;pendingEditAt=0;if(!writeRecordNow({edited:isEdited,editedAt}))throw new Error('local-save-failed');}if(currentPatient!==String(n))throw new Error('record-selection-changed');localStorage.setItem(storageKey(n),JSON.stringify(record));loadRecord(String(n));}};
+  slot.addEventListener('change',()=>{saveRecord(false);setTimeout(()=>loadRecord(slot.value),300);});
   form.addEventListener('input',saveRecord);form.addEventListener('change',saveRecord);
   loadRecord(slot.value);
 
@@ -1403,5 +1418,6 @@ body.case-flow-open #case-assessment-tab{padding-top:0}
  body.case-flow-open .case-note{font-size:13px}
 }
 </style>
+<script type="module" src="./sicu-cloud-sync.js"></script>
 </body>
 </html>
