@@ -290,6 +290,22 @@ async function run() {
   assert.equal(automaticSaveApp.cloud.record.values.title, 'synthetic edit after opt-in');
   assert.deepEqual(automaticSaveApp.refs.at(-1), ['users', 'owner-uid', 'sicuCasePackets', 'patient-1'], 'automatic sync stays in the owner UID path');
   assert.equal(automaticSaveApp.storage.has('sicuCloudAutoSyncQueueV1:owner-uid:patient-1'), false, 'successful sync clears the durable queue');
+  editSyntheticDraft(automaticSaveApp, 'second synthetic edit after in-sync', enabledConsent.enabledAt + 20);
+  await automaticSaveApp.settle();
+  assert.equal(automaticSaveApp.writes, 2, 'edits after a successful sync must automatically upload while state was in-sync');
+  assert.equal(automaticSaveApp.cloud.record.values.title, 'second synthetic edit after in-sync');
+
+  const postSyncConflictApp = makeHarness({ initialCloud: null });
+  await enableAutomaticSync(postSyncConflictApp);
+  const postSyncConsent = JSON.parse(postSyncConflictApp.storage.get('sicuCloudAutoSyncConsentV1:owner-uid:patient-1'));
+  editSyntheticDraft(postSyncConflictApp, 'first post-sync baseline', postSyncConsent.enabledAt + 10);
+  await postSyncConflictApp.settle();
+  postSyncConflictApp.cloud = { schemaVersion: 1, record: { values: { title: 'other device edit' }, medicationCount: 0 }, clientUpdatedAt: 3 };
+  editSyntheticDraft(postSyncConflictApp, 'new local post-sync edit', postSyncConsent.enabledAt + 20);
+  await postSyncConflictApp.settle();
+  assert.equal(postSyncConflictApp.writes, 1, 'a later edit must not overwrite a cloud change made after the last sync');
+  assert.equal(postSyncConflictApp.cloud.record.values.title, 'other device edit');
+  assert.match(postSyncConflictApp.elements.get('case-cloud-status').textContent, /cloud copy changed/i);
 
   const preOptInApp = makeHarness({ initialCloud: null });
   await preOptInApp.signIn();

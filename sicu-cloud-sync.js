@@ -469,10 +469,21 @@ function queueAutomaticDraft(event) {
     setStatus('Offline. This fictional draft is saved on this device and queued for private sync when the connection returns.');
   } else if (syncBusy) {
     autoSyncRerun = true;
-  } else if (['new', 'local-ahead'].includes(syncState)) {
-    void flushAutomaticQueue(uid, n, checkGeneration, queued);
-  } else if (['unknown', 'error', 'signed-out'].includes(syncState)) {
-    void checkCloud();
+  } else {
+    // A later edit can arrive after the previous upload left the cached state
+    // at in-sync. Recompute against the captured baseline before deciding
+    // whether the durable queue is safe to flush.
+    if (syncState === 'in-sync') {
+      syncState = currentRelation().state;
+      renderButtons();
+    }
+    if (['new', 'local-ahead'].includes(syncState)) {
+      void flushAutomaticQueue(uid, n, checkGeneration, queued);
+    } else if (['unknown', 'error', 'signed-out'].includes(syncState)) {
+      void checkCloud();
+    } else if (syncState === 'conflict') {
+      setStatus('Both copies may have changed. The new edit remains queued on this device; review the copies before resolving this conflict.', true);
+    }
   }
 }
 
