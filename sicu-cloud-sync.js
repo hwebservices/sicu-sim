@@ -103,10 +103,12 @@ function samePacketRecord(a, b) {
 function isValidPacketRecord(record, n) {
   if (!record || typeof record !== 'object' || Array.isArray(record)) return false;
   if (!record.values || typeof record.values !== 'object' || Array.isArray(record.values)) return false;
-  if (!Number.isInteger(record.medicationCount) || record.medicationCount < 0 || record.medicationCount > 100) return false;
-  if (record.dripCount !== undefined && (!Number.isInteger(record.dripCount) || record.dripCount < 0 || record.dripCount > 100)) return false;
-  if (record.monitoringCount !== undefined && (!Number.isInteger(record.monitoringCount) || record.monitoringCount < 0 || record.monitoringCount > 50)) return false;
-  if (record.transportScopeCount !== undefined && (!Number.isInteger(record.transportScopeCount) || record.transportScopeCount < 0 || record.transportScopeCount > 100)) return false;
+  // Older saved packets were allowed to grow without a row limit. Keep cloud
+  // restore compatible with those records; entry buttons enforce current caps.
+  if (!Number.isInteger(record.medicationCount) || record.medicationCount < 0) return false;
+  if (record.dripCount !== undefined && (!Number.isInteger(record.dripCount) || record.dripCount < 0)) return false;
+  if (record.monitoringCount !== undefined && (!Number.isInteger(record.monitoringCount) || record.monitoringCount < 0)) return false;
+  if (record.transportScopeCount !== undefined && (!Number.isInteger(record.transportScopeCount) || record.transportScopeCount < 0)) return false;
   if (record.seedVersion !== undefined && (!Number.isFinite(record.seedVersion) || typeof record.seedVersion !== 'number')) return false;
   if (!Object.entries(record.values).every(([key, value]) => typeof key === 'string' && typeof value === 'string')) return false;
   const patientNumber = record.values['packet.patientNumber'];
