@@ -1214,5 +1214,74 @@ body[data-room-failed="true"] #sicu-panel-shortcuts{bottom:10px!important}
  let last=0,lastText='';const started=Date.now();setInterval(()=>{const v=window.sicu?.state?.patient?.vitals;if(!v)return;const vals={hr:Math.round(v.hr),spo2:Math.round(v.spo2),sys:Math.round(v.nibpSys),dia:Math.round(v.nibpDia),rr:Math.round(v.rr)};for(const [id,t] of [['strip-hr','HR '+vals.hr],['strip-spo2','SpO₂ '+vals.spo2+'%'],['strip-bp','BP '+vals.sys+'/'+vals.dia],['strip-rr','RR '+vals.rr]]){const el=document.getElementById(id);if(el)el.textContent=t;}const text='HR '+vals.hr+' · SpO₂ '+vals.spo2+'% · BP '+vals.sys+'/'+vals.dia+' · RR '+vals.rr,now=Date.now();if(now-last>=15000&&text!==lastText){const list=document.getElementById('sicu-event-list');if(list){const li=document.createElement('li');li.textContent=String(Math.floor((now-started)/60000)).padStart(2,'0')+':'+String(Math.floor((now-started)/1000)%60).padStart(2,'0')+'  Vitals trend · '+text;list.append(li);while(list.children.length>40)list.firstChild.remove();}lastText=text;last=now;}},1000);
 })();
 </script>
+<style id="sicu-room-menu-styles">
+/* One reserved lower dock replaces the room's scattered floating controls. */
+.toolbar,#sicu-assessment-toggle,#sicu-report-toggle,#sicu-present-toggle,#case-toggle,#sicu-panel-shortcuts,#sicu-fallback-actions{display:none!important}
+#sicu-room-menu{position:fixed;inset:0;z-index:30;display:none;align-items:flex-end;justify-content:flex-start;margin:0;width:100%;height:100%;max-width:none;max-height:none;border:0;padding:16px 16px 120px;background:transparent;color:inherit;}
+#sicu-room-menu::backdrop{background:transparent}
+#sicu-room-menu[open]{display:flex}
+#sicu-room-menu-sheet{width:min(100%,520px);max-height:min(78dvh,680px);overflow:auto;padding:20px 20px calc(20px + env(safe-area-inset-bottom));border:1px solid #dfe4dc;border-radius:20px;background:#f8f9f6;color:#252b27;box-shadow:0 18px 56px #10171350;overscroll-behavior:contain;}
+.sicu-menu-heading{position:static;left:auto;top:auto;z-index:auto;display:flex;align-items:center;justify-content:space-between;gap:16px;margin:0 0 16px;text-align:left;pointer-events:auto}
+.sicu-menu-heading h2{font:600 18px/1.2 Arial,sans-serif;margin:0}
+.sicu-menu-heading p{font:12px/1.4 Arial,sans-serif;color:#657068;margin:4px 0 0}
+#sicu-room-menu-close{min-width:44px;min-height:44px;border:1px solid #d8ded8;background:#fff;font-size:20px}
+.sicu-menu-group{margin:16px 0 0;padding-top:14px;border-top:1px solid #e0e4df}
+.sicu-menu-group h3{margin:0 0 8px;color:#606b63;font:700 11px/1.2 Arial,sans-serif;letter-spacing:.1em;text-transform:uppercase}
+.sicu-menu-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.sicu-menu-actions button{min-height:52px;padding:10px 12px;border:1px solid #d8ded8;border-radius:10px;background:#fff;color:#27332c;text-align:left;font:600 14px/1.25 Arial,sans-serif;touch-action:manipulation}
+.sicu-menu-actions button:hover,.sicu-menu-actions button:focus-visible{background:#edf2ed;outline:2px solid #557665;outline-offset:1px}
+#sicu-room-menu-dock{position:fixed;inset:auto 0 0;z-index:28;height:72px;background:#d9dcd6f2;border-top:1px solid #fafbf7;box-shadow:0 -4px 22px #20231e10;pointer-events:none}
+#sicu-room-menu-trigger{position:absolute;left:12px;bottom:10px;z-index:29;display:flex;align-items:center;gap:10px;min-height:50px;padding:0 18px;border:1px solid #ffffff;border-radius:14px;background:#f8f9f6;color:#26322b;box-shadow:0 5px 22px #1117;font:700 14px Arial,sans-serif;touch-action:manipulation;pointer-events:auto}
+#sicu-room-menu-trigger .sicu-menu-icon{display:grid;gap:4px;width:17px}
+#sicu-room-menu-trigger .sicu-menu-icon i{height:2px;border-radius:2px;background:#31483b}
+body.sicu-present #sicu-room-menu-trigger{z-index:29}
+@media(max-width:700px){
+  #sicu-room-menu{padding:0 0 160px;background:#11171370}
+  #sicu-room-menu-sheet{width:100%;max-height:min(82dvh,calc(100dvh - 160px));border-radius:20px 20px 0 0;padding:18px 16px calc(18px + env(safe-area-inset-bottom))}
+  #sicu-room-menu-trigger{left:12px;bottom:10px;min-height:52px;padding:0 18px;border-radius:14px}
+  .sicu-menu-actions{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+  .sicu-menu-actions button{min-height:52px;padding:10px;font-size:14px;overflow-wrap:anywhere}
+}
+@media(max-height:500px) and (orientation:landscape){#sicu-room-menu-sheet{max-height:calc(100dvh - 160px)}.sicu-menu-actions{grid-template-columns:repeat(2,minmax(0,1fr))}}
+</style>
+<div id="sicu-room-menu-dock" aria-hidden="true"><button id="sicu-room-menu-trigger" type="button" aria-haspopup="dialog" aria-controls="sicu-room-menu" aria-expanded="false"><span class="sicu-menu-icon" aria-hidden="true"><i></i><i></i><i></i></span>Menu</button></div>
+<dialog id="sicu-room-menu" aria-labelledby="sicu-room-menu-title">
+  <section id="sicu-room-menu-sheet">
+    <header class="sicu-menu-heading"><div><h2 id="sicu-room-menu-title">Room menu</h2><p>Choose a view, documentation panel, or room action.</p></div><button id="sicu-room-menu-close" type="button" aria-label="Close room menu">×</button></header>
+    <section class="sicu-menu-group" aria-labelledby="sicu-menu-views"><h3 id="sicu-menu-views">Views</h3><div class="sicu-menu-actions">
+      <button type="button" data-room-action="view-room">Room view</button><button type="button" data-room-action="view-bed">Bedside view</button><button type="button" data-room-action="view-headwall">Headwall view</button><button type="button" data-room-action="reset-view">Reset view</button><button type="button" data-room-action="fullscreen">Full screen</button>
+    </div></section>
+    <section class="sicu-menu-group" aria-labelledby="sicu-menu-documentation"><h3 id="sicu-menu-documentation">Documentation</h3><div class="sicu-menu-actions">
+      <button type="button" data-room-action="case">Case presentation</button><button type="button" data-room-action="assessment">Patient assessment</button><button type="button" data-room-action="report">Daily report</button>
+    </div></section>
+    <section class="sicu-menu-group" aria-labelledby="sicu-menu-room-actions"><h3 id="sicu-menu-room-actions">Room actions</h3><div class="sicu-menu-actions">
+      <button type="button" data-room-action="controls">Simulator controls</button><button type="button" data-room-action="events">Event log</button><button type="button" data-room-action="present">Presentation mode</button>
+    </div></section>
+  </section>
+</dialog>
+<script>
+(()=>{
+  const trigger=document.getElementById('sicu-room-menu-trigger');
+  const menu=document.getElementById('sicu-room-menu');
+  const closeButton=document.getElementById('sicu-room-menu-close');
+  if(!trigger||!menu||!closeButton)return;
+  function closeMenu(restoreFocus=true){menu.close();trigger.setAttribute('aria-expanded','false');if(restoreFocus)trigger.focus();}
+  trigger.addEventListener('click',()=>{menu.showModal();trigger.setAttribute('aria-expanded','true');closeButton.focus();});
+  closeButton.addEventListener('click',()=>closeMenu());
+  menu.addEventListener('click',event=>{if(event.target===menu)closeMenu();});
+  menu.addEventListener('close',()=>trigger.setAttribute('aria-expanded','false'));
+  menu.querySelectorAll('[data-room-action]').forEach(button=>button.addEventListener('click',()=>{
+    const targets={
+      'view-room':'.toolbar [data-view="room"]','view-bed':'.toolbar [data-view="bed"]','view-headwall':'.toolbar [data-view="headwall"]',
+      'reset-view':'#reset','fullscreen':'#fullscreen','case':'#case-toggle','assessment':'#sicu-assessment-toggle','report':'#sicu-report-toggle',
+      'controls':'#sicu-controls-shortcut','events':'#sicu-events-shortcut','present':'#sicu-present-toggle'
+    };
+    const target=document.querySelector(targets[button.dataset.roomAction]);
+    closeMenu(false);
+    if(target)target.click();
+  }));
+  document.addEventListener('keydown',event=>{if(event.key==='Escape'&&menu.open)closeMenu(false);});
+})();
+</script>
 </body>
 </html>
