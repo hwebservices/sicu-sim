@@ -9,7 +9,7 @@ function makeHarness({ initialCloud } = {}) {
   const elements = new Map();
   const storage = new Map();
   let authChanged;
-  const base = { values: { title: 'base' }, medicationCount: 0 };
+  const base = { values: { title: 'base' }, medicationCount: 0, dripCount: 0, monitoringCount: 0, transportScopeCount: 0 };
   let cloud = initialCloud === undefined ? { schemaVersion: 1, record: base, clientUpdatedAt: 1 } : initialCloud;
   let readGate = null;
   let reads = 0;
@@ -45,7 +45,9 @@ function makeHarness({ initialCloud } = {}) {
   title.name = 'title';
   const form = get('case-form');
   form.elements = [title];
-  get('case-med-list').children = [];
+  for (const id of ['case-med-list', 'case-drip-list', 'case-monitor-rows', 'case-transport-scope-rows']) {
+    get(id).children = [];
+  }
 
   const localStorage = {
     getItem: (key) => storage.get(key) ?? null,
@@ -156,12 +158,14 @@ async function run() {
   const cloudButton = app.elements.get('case-cloud-check');
   const uploadButton = app.elements.get('case-cloud-upload');
   const replaceButton = app.elements.get('case-cloud-replace');
-  app.elements.get('case-cloud-fictional').checked = true;
   await app.signIn();
+  app.elements.get('case-cloud-fictional').checked = true;
   await cloudButton.handlers.click();
   assert.equal(app.reads, 1, 'initial check should read the existing cloud baseline');
 
   app.title.value = 'local edit';
+  await cloudButton.handlers.click();
+  assert.equal(uploadButton.disabled, false, 'a refreshed local-ahead record can be uploaded');
   let releaseTransactionRead;
   const transactionRead = new Promise((resolve) => { releaseTransactionRead = resolve; });
   app.setReadGate(transactionRead);
@@ -170,7 +174,7 @@ async function run() {
 
   app.cloud = { schemaVersion: 1, record: { values: { title: 'remote new' }, medicationCount: 0 }, clientUpdatedAt: 2 };
   await cloudButton.handlers.click();
-  assert.equal(app.reads, 1, 'a concurrent cloud check must not run during upload');
+  assert.equal(app.reads, 2, 'a concurrent cloud check must not run during upload');
   releaseTransactionRead();
   await upload;
   assert.equal(app.writes, 0, 'changed remote data must not be overwritten');
@@ -189,8 +193,8 @@ async function run() {
   assert.equal(app.cloud.record.values.title, 'remote new');
 
   const accountApp = makeHarness();
-  accountApp.elements.get('case-cloud-fictional').checked = true;
   await accountApp.signIn();
+  accountApp.elements.get('case-cloud-fictional').checked = true;
   await accountApp.elements.get('case-cloud-check').handlers.click();
   accountApp.title.value = 'local account edit';
   let releaseAccountRead;

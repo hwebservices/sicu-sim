@@ -33,6 +33,9 @@ google.setCustomParameters({ prompt: 'select_account' });
 const slot = document.getElementById('case-patient-slot');
 const form = document.getElementById('case-form');
 const medList = document.getElementById('case-med-list');
+const dripList = document.getElementById('case-drip-list');
+const monitorRows = document.getElementById('case-monitor-rows');
+const transportScopeRows = document.getElementById('case-transport-scope-rows');
 const signInButton = document.getElementById('case-cloud-signin');
 const signOutButton = document.getElementById('case-cloud-signout');
 const checkButton = document.getElementById('case-cloud-check');
@@ -75,10 +78,35 @@ function same(a, b) {
   return stable(a) === stable(b);
 }
 
+function canonicalPacketRecord(record) {
+  if (!record || typeof record !== 'object' || !record.values) return record;
+  const inferredCount = (prefix, fallback = 0) => {
+    const indexes = Object.keys(record.values).map((key) => {
+      const match = key.match(new RegExp(`^${prefix.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}\\.(\\d+)\\.`));
+      return match ? Number(match[1]) : -1;
+    });
+    const highest = Math.max(-1, ...indexes);
+    return highest < 0 ? fallback : highest + 1;
+  };
+  return {
+    ...record,
+    dripCount: record.dripCount ?? inferredCount('drips'),
+    monitoringCount: record.monitoringCount ?? inferredCount('packet.monitoring'),
+    transportScopeCount: record.transportScopeCount ?? inferredCount('packet.transport.scopeReview'),
+  };
+}
+
+function samePacketRecord(a, b) {
+  return same(canonicalPacketRecord(a), canonicalPacketRecord(b));
+}
+
 function isValidPacketRecord(record, n) {
   if (!record || typeof record !== 'object' || Array.isArray(record)) return false;
   if (!record.values || typeof record.values !== 'object' || Array.isArray(record.values)) return false;
-  if (!Number.isInteger(record.medicationCount) || record.medicationCount < 0 || record.medicationCount > 20) return false;
+  if (!Number.isInteger(record.medicationCount) || record.medicationCount < 0 || record.medicationCount > 100) return false;
+  if (record.dripCount !== undefined && (!Number.isInteger(record.dripCount) || record.dripCount < 0 || record.dripCount > 100)) return false;
+  if (record.monitoringCount !== undefined && (!Number.isInteger(record.monitoringCount) || record.monitoringCount < 0 || record.monitoringCount > 50)) return false;
+  if (record.transportScopeCount !== undefined && (!Number.isInteger(record.transportScopeCount) || record.transportScopeCount < 0 || record.transportScopeCount > 100)) return false;
   if (record.seedVersion !== undefined && (!Number.isFinite(record.seedVersion) || typeof record.seedVersion !== 'number')) return false;
   if (!Object.entries(record.values).every(([key, value]) => typeof key === 'string' && typeof value === 'string')) return false;
   const patientNumber = record.values['packet.patientNumber'];
@@ -100,7 +128,7 @@ function localRecord() {
   for (const element of form.elements) {
     if (element.name) values[element.name] = element.value;
   }
-  const record = { values, medicationCount: medList.children.length };
+  const record = { values, medicationCount: medList.children.length, dripCount: dripList.children.length, monitoringCount: monitorRows.children.length, transportScopeCount: transportScopeRows.children.length };
   if (saved?.seedVersion !== undefined && saved?.seedVersion !== null) record.seedVersion = saved.seedVersion;
   return record;
 }
@@ -200,10 +228,10 @@ function currentRelation() {
   const local = localRecord();
   if (!remoteExists) return { state: 'new', local };
   if (!remoteRecord) return { state: 'conflict', local };
-  if (same(local, remoteRecord)) return { state: 'in-sync', local };
+  if (samePacketRecord(local, remoteRecord)) return { state: 'in-sync', local };
   if (!baselineRecord) return { state: 'conflict', local };
-  if (same(remoteRecord, baselineRecord)) return { state: 'local-ahead', local };
-  if (same(local, baselineRecord)) return { state: 'remote-ahead', local };
+  if (samePacketRecord(remoteRecord, baselineRecord)) return { state: 'local-ahead', local };
+  if (samePacketRecord(local, baselineRecord)) return { state: 'remote-ahead', local };
   return { state: 'conflict', local };
 }
 
@@ -279,7 +307,7 @@ async function reconcileAutomaticSync(uid, n, generation, localAtCheck) {
     return;
   }
   if (syncState === 'remote-ahead') {
-    if (generation !== checkGeneration || !same(localRecord(), localAtCheck)) {
+    if (generation !== checkGeneration || !samePacketRecord(localRecord(), localAtCheck)) {
       syncState = 'conflict';
       renderButtons();
       setStatus('Both copies may have changed during the check. No copy was overwritten; review the copies before resolving this conflict.', true);
@@ -341,7 +369,7 @@ async function flushAutomaticQueue(uid, n, generation, queued) {
     setStatus('This draft is too large to sync. The local copy remains saved and queued on this device.', true);
     return;
   }
-  if (!same(localRecord(), queued.record)) {
+  if (!samePacketRecord(localRecord(), queued.record)) {
     setStatus('Waiting for the latest local edit to save before syncing.');
     return;
   }
@@ -541,7 +569,7 @@ async function writeCloud({ overwrite = false } = {}) {
       baselineRecord = local;
       saveBaselineFor(writeSlot, local);
       const queued = readQueue(writeUid, writeSlot);
-      if (queued && same(queued.record, local)) clearQueue(writeUid, writeSlot);
+      if (queued && samePacketRecord(queued.record, local)) clearQueue(writeUid, writeSlot);
       const relationAfterSave = currentRelation();
       syncState = relationAfterSave.state;
       setStatus(syncState === 'in-sync'
