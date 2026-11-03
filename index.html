@@ -869,6 +869,7 @@ body.sicu-present>header,body.sicu-present .help,body.sicu-present .tag,body.sic
     ].join('\n\n');
   }
   function renderReport() { reportContent.textContent = reportText(); }
+  window.sicuDailyReportRefresh=renderReport;
   document.getElementById('sicu-copy-summary').addEventListener('click', async () => {
     const text = summaryText();
     try {
@@ -907,25 +908,25 @@ body.sicu-present>header,body.sicu-present .help,body.sicu-present .tag,body.sic
 <!-- Case presentation form and printable encounter summary. -->
 <button id="case-toggle" type="button" aria-expanded="false" style="position:fixed;left:28px;top:174px;z-index:7;padding:9px 13px;background:#fffffff2;border:1px solid #e0e2dc">Case presentation</button>
 <main id="case-panel" role="dialog" aria-modal="true" aria-labelledby="case-panel-title" aria-label="Case presentation form" hidden>
-  <div class="case-top"><div><p class="case-kicker">SICU / DOCUMENTATION</p><h2 id="case-panel-title" tabindex="-1">Encounter presentation</h2></div><div class="case-top-actions"><label class="case-patient-picker">Patient record<select id="case-patient-slot" aria-label="Patient record"><option value="1">Patient 1</option><option value="2">Patient 2</option></select></label><span id="case-save-status" role="status">Saved on this device</span><button id="case-print" type="button">Print report</button><button id="case-close" type="button" aria-label="Hide case form">Hide form</button></div></div>
+  <header class="case-flow-header"><div class="case-flow-title"><p class="case-kicker">SICU / DOCUMENTATION</p><h2 id="case-panel-title" tabindex="-1">Encounter presentation</h2></div><div class="case-top-actions"><label class="case-patient-picker">Patient record<select id="case-patient-slot" aria-label="Patient record"><option value="1">Patient 1</option><option value="2">Patient 2</option></select></label><span id="case-save-status" role="status" aria-live="polite">Saved on this device</span><button id="case-print" type="button">Print report</button><button id="case-close-x" type="button" aria-label="Close form">×</button><button id="case-close" type="button">Back to room</button></div></header>
   <p class="case-note">Fictional teaching data only; never enter real patient information.</p>
-  <details id="case-cloud-sync" style="margin:10px 0;padding:10px 12px;border:1px solid #c8d2cd;border-radius:8px;background:#fff">
-    <summary style="cursor:pointer;font-weight:600">Optional cloud sync</summary>
-    <p class="case-help">Sync only fictional teaching records to your private account. Existing drafts remain on this device until you choose an action.</p>
+  <details id="case-cloud-sync" style="margin:8px 0;padding:8px 10px;border:1px solid #c8d2cd;border-radius:8px;background:#fff">
+    <summary style="cursor:pointer;font-weight:600;min-height:44px;display:flex;align-items:center">Private cloud sync</summary>
+    <p class="case-help">Owner-only automatic sync for fictional teaching drafts. Existing local drafts stay on this device until you explicitly save them or make a new edit after confirming this record is fictional.</p>
     <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px">
       <button id="case-cloud-signin" type="button">Sign in with Google</button>
       <button id="case-cloud-signout" type="button" hidden>Sign out</button>
       <button id="case-cloud-check" type="button" disabled>Check cloud copy</button>
-      <button id="case-cloud-upload" type="button" disabled>Save local copy to cloud</button>
-      <button id="case-cloud-download" type="button" disabled>Load cloud copy to this device</button>
-      <button id="case-cloud-replace" type="button" disabled hidden>Replace cloud copy</button>
+      <button id="case-cloud-upload" type="button" disabled>Save current draft</button>
+      <button id="case-cloud-download" type="button" disabled>Load cloud draft</button>
+      <button id="case-cloud-replace" type="button" disabled hidden>Replace cloud draft</button>
     </div>
     <label style="display:flex;align-items:flex-start;gap:8px;margin:9px 0;font-size:12px"><input id="case-cloud-fictional" type="checkbox">I confirm this selected record contains fictional teaching data only and no real patient information or identifiers.</label>
-    <p id="case-cloud-status" role="status" aria-live="polite" class="case-help">Cloud sync is optional; local autosave remains available if Firebase cannot be reached.</p>
+    <p id="case-cloud-status" role="status" aria-live="polite" class="case-help">Local autosave is active. Sign in to check for a private cloud copy.</p>
   </details>
+  <p class="case-student-lock-notice">Student mode · Observation only. Pump-based medications/fluids and ventilator settings are locked; oxygen interface is visual-only.</p>
   <p id="case-scenario-notice" class="case-scenario-notice" role="status" aria-live="polite"></p>
   <nav id="case-mobile-tabs" class="case-mobile-tabs" role="tablist" aria-label="Patient documentation tabs"></nav>
-  <nav class="case-nav" aria-label="Case sections"><a href="#case-encounter">Encounter</a><a href="#case-vitals">Vitals timeline</a><a href="#case-medications">Medication record</a><a href="#case-presentation">Presentation</a></nav>
   <form id="case-form">
     <section id="case-encounter" class="case-section"><h3>Encounter &amp; history / physical</h3>
       <div class="case-grid"><label>Student name<input name="rotation.studentName" autocomplete="off"></label><label>Student number<input name="rotation.studentNumber" autocomplete="off"></label><label>Rotation date<input name="rotation.date" type="date"></label><label>Patient number<input name="packet.patientNumber" value="1" readonly></label></div>
@@ -959,7 +960,10 @@ body.sicu-present>header,body.sicu-present .help,body.sicu-present .tag,body.sic
       <h4>Transport planning</h4><label>Equipment needed for transport<textarea name="packet.transport.equipment" rows="2"></textarea></label><label>Medications to consider for transport<textarea name="packet.transport.medications" rows="2"></textarea></label><label>Precautions or issues for safe transport<textarea name="packet.transport.precautions" rows="3"></textarea></label><label>Scope-of-practice considerations to discuss<textarea name="packet.transport.scope" rows="3"></textarea></label>
       <h4>Preceptor and lecture learning</h4><label>What you learned specific to this patient from the preceptor<textarea name="packet.learning.preceptor" rows="3"></textarea></label><div class="case-grid"><label>Educational lecture date<input name="packet.learning.lectureDate" type="date"></label><label>Educational lecture topic<textarea name="packet.learning.lectureTopic" rows="2"></textarea></label></div><label>Five learning points from the lecture<textarea name="packet.learning.lecturePoints" rows="5" placeholder="Enter one point per line"></textarea></label>
     </section>
+    <section id="case-report-tab" class="case-section"><h3>Report</h3><div id="case-report-slot"></div></section>
+    <section id="case-assessment-tab" class="case-section"><h3>Live assessment and plan</h3><div id="case-assessment-slot"></div></section>
   </form>
+  <footer id="case-flow-footer" aria-label="Form navigation"><button id="case-tab-back" type="button">Back</button><span id="case-tab-position" aria-live="polite"></span><button id="case-tab-next" type="button">Next</button></footer>
 </main>
 <article id="case-print-report" aria-label="Printable encounter report"></article>
 <style>
@@ -1003,8 +1007,8 @@ body.sicu-present>header,body.sicu-present .help,body.sicu-present .tag,body.sic
   function inputCell(name,label){const td=document.createElement('td');const el=label.includes('note')?document.createElement('textarea'):document.createElement('input');el.name=`vitals.${name}`;el.setAttribute('aria-label',`${label} · ${name}`);if(label==='Time')el.placeholder='Time';else el.placeholder='—';td.append(el);return td;}
   labels.forEach((label,index)=>{const tr=document.createElement('tr'),th=document.createElement('td');tr.className='case-vital-row';th.textContent=label;th.className='case-timepoint';tr.append(th);columns.forEach((column,i)=>{const td=inputCell(`row${index}.${i}`,column);td.dataset.label=column;if(index===3&&['MAP','BP','RR','HR','Temp','SpO2'].includes(column)){const value=td.querySelector('input');value.readOnly=true;value.setAttribute('aria-readonly','true');value.title='Linked to current simulator state';}tr.append(td);});vitalsBody.append(tr);});
   const medList=document.getElementById('case-med-list');
-  function addMedication(){const row=document.createElement('div');row.className='case-med-row';[['Drug classification','classification'],['Medication','drug'],['Infusion pump used','pump'],['Why this pump','pumpReason'],['Dosage / duration','dosageDuration'],['Reason needed','reason']].forEach(([label,key])=>{const wrap=document.createElement('label');wrap.textContent=label;const el=document.createElement('input');el.name=`medications.${medList.children.length}.${key}`;el.placeholder=label;wrap.append(el);row.append(wrap);});const remove=document.createElement('button');remove.type='button';remove.textContent='Remove';remove.addEventListener('click',()=>row.remove());row.append(remove);medList.append(row);}
-  document.getElementById('case-add-med').addEventListener('click',addMedication);addMedication();
+  function addMedication(){const row=document.createElement('div');row.className='case-med-row';[['Drug classification','classification'],['Medication','drug'],['Infusion pump used','pump'],['Why this pump','pumpReason'],['Dosage / duration','dosageDuration'],['Reason needed','reason']].forEach(([label,key])=>{const wrap=document.createElement('label');wrap.textContent=label;const el=document.createElement('input');el.name=`medications.${medList.children.length}.${key}`;el.placeholder=label;wrap.append(el);row.append(wrap);});const remove=document.createElement('button');remove.type='button';remove.textContent='Remove';remove.addEventListener('click',event=>{row.remove();if(event.isTrusted)form.dispatchEvent(new Event('input',{bubbles:true}));});row.append(remove);medList.append(row);}
+  document.getElementById('case-add-med').addEventListener('click',event=>{addMedication();if(event.isTrusted)form.dispatchEvent(new Event('input',{bubbles:true}));});addMedication();
   const closeButton=document.getElementById('case-close');
   const scenarioNotice=document.getElementById('case-scenario-notice');
   const scenarioLabel=document.getElementById('sicu-scenario-label');
@@ -1012,9 +1016,26 @@ body.sicu-present>header,body.sicu-present .help,body.sicu-present .tag,body.sic
   function syncScenarioNotice(){const message=simulatorNotice?.textContent?.trim();const visible=simulatorNotice&&getComputedStyle(simulatorNotice).display!=='none'&&getComputedStyle(simulatorNotice).opacity!=='0';scenarioNotice.textContent=visible&&message?message:(scenarioLabel?.textContent?.trim()||'Educational simulation · Not clinically validated');}
   if(scenarioLabel)new MutationObserver(syncScenarioNotice).observe(scenarioLabel,{childList:true,subtree:true,characterData:true});
   if(simulatorNotice)new MutationObserver(syncScenarioNotice).observe(simulatorNotice,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['style']});
-  function open(){syncScenarioNotice();panel.hidden=false;toggle.setAttribute('aria-expanded','true');document.getElementById('case-panel-title').focus();}
-  function close(){panel.hidden=true;toggle.setAttribute('aria-expanded','false');toggle.focus();}
-  toggle.addEventListener('click',open);closeButton.addEventListener('click',close);
+  let flowHistoryPushed=false;
+  function open(){
+    if(panel.hidden){
+      history.pushState({...history.state,sicuCaseFlow:true},'',location.href);
+      flowHistoryPushed=true;
+      document.body.classList.add('case-flow-open');
+      panel.hidden=false;
+      window.sicuFormTabs?.activate('encounter',{restore:false});
+    }
+    syncScenarioNotice();toggle.setAttribute('aria-expanded','true');document.getElementById('case-panel-title').focus();
+  }
+  function close(fromPopstate=false){
+    if(panel.hidden)return;
+    window.sicuCaseDraftController?.flush?.();
+    panel.hidden=true;document.body.classList.remove('case-flow-open');toggle.setAttribute('aria-expanded','false');
+    (document.getElementById('sicu-room-menu-trigger')||toggle).focus();
+    if(flowHistoryPushed){flowHistoryPushed=false;if(!fromPopstate&&history.state?.sicuCaseFlow)history.back();}
+  }
+  toggle.addEventListener('click',open);closeButton.addEventListener('click',()=>close());document.getElementById('case-close-x').addEventListener('click',()=>close());
+  window.addEventListener('popstate',()=>{if(flowHistoryPushed)close(true);});
   panel.addEventListener('keydown',event=>{
     if(event.key==='Escape'){event.preventDefault();close();return;}
     if(event.key!=='Tab')return;
@@ -1042,13 +1063,59 @@ body.sicu-present>header,body.sicu-present .help,body.sicu-present .tag,body.sic
   const form=document.getElementById('case-form'), panel=document.getElementById('case-panel');
   const slot=document.getElementById('case-patient-slot'), status=document.getElementById('case-save-status');
   const medList=document.getElementById('case-med-list'), addMedicationButton=document.getElementById('case-add-med');
-  const tabs=[['case-encounter','Encounter'],['case-vitals','Vitals'],['case-medications','Meds'],['case-presentation','Presentation'],['case-critical-care','ICU review'],['case-labs','Labs'],['case-equipment','Equipment'],['case-ecg','ECG'],['case-prehospital','Prehospital']];
+  const tabs=[
+    {key:'encounter',label:'Encounter',sections:['case-encounter']},
+    {key:'vitals',label:'Vitals',sections:['case-vitals']},
+    {key:'meds',label:'Meds',sections:['case-medications']},
+    {key:'assessment',label:'Assessment',sections:['case-critical-care','case-labs','case-equipment','case-ecg','case-prehospital'],wrapperId:'case-assessment-tab'},
+    {key:'presentation',label:'Presentation',sections:['case-presentation']},
+    {key:'report',label:'Report',sections:[],wrapperId:'case-report-tab'}
+  ];
   const tabRoot=document.getElementById('case-mobile-tabs');
-  const tabButtons=new Map();
-  for(const [id,title] of tabs){const button=document.createElement('button');button.type='button';button.role='tab';button.textContent=title;button.setAttribute('aria-controls',id);button.setAttribute('aria-selected','false');button.addEventListener('click',()=>activateTab(id));tabRoot.append(button);tabButtons.set(id,button);}
-  function activateTab(id){panel.dataset.activeTab=id;const mobile=matchMedia('(max-width: 700px), (max-height: 500px)').matches;for(const section of form.querySelectorAll(':scope > .case-section'))section.hidden=mobile&&section.id!==id;for(const [key,button] of tabButtons)button.setAttribute('aria-selected',String(key===id));if(mobile)form.scrollTop=0;}
-  function resizeTabs(){const mobile=matchMedia('(max-width: 700px), (max-height: 500px)').matches;if(mobile)activateTab(panel.dataset.activeTab||'case-encounter');else{for(const section of form.querySelectorAll(':scope > .case-section'))section.hidden=false;for(const button of tabButtons.values())button.setAttribute('aria-selected','false');}}
-  window.addEventListener('resize',resizeTabs);resizeTabs();
+  const tabButtons=new Map(),tabPanels=new Map(),scrollPositions=new Map();
+  const originalSections=new Map([...form.querySelectorAll(':scope > .case-section')].map(section=>[section.id,section]));
+  const caseAssessmentTab=originalSections.get('case-assessment-tab'),caseReportTab=originalSections.get('case-report-tab');
+  form.replaceChildren();
+  for(const tab of tabs){
+    const wrapper=tab.wrapperId==='case-assessment-tab'?caseAssessmentTab:tab.wrapperId==='case-report-tab'?caseReportTab:document.createElement('section');
+    if(!tab.wrapperId){wrapper.id=`case-tabpanel-${tab.key}`;wrapper.className='case-tab-panel';}
+    wrapper.setAttribute('role','tabpanel');wrapper.hidden=true;
+    for(const sectionId of tab.sections){const section=originalSections.get(sectionId);if(section)wrapper.append(section);}
+    form.append(wrapper);tabPanels.set(tab.key,wrapper);
+    const button=document.createElement('button');button.type='button';button.role='tab';button.id=`case-tab-${tab.key}`;button.textContent=tab.label;button.setAttribute('aria-controls',wrapper.id);button.setAttribute('aria-selected','false');button.tabIndex=-1;button.addEventListener('click',()=>activateTab(tab.key));tabRoot.append(button);tabButtons.set(tab.key,button);
+  }
+  const assessmentPanel=document.getElementById('sicu-assessment-panel'),reportPanel=document.getElementById('sicu-report-panel');
+  document.getElementById('case-assessment-slot').append(assessmentPanel);
+  document.getElementById('case-report-slot').append(reportPanel);
+  let activeTab='encounter';
+  function activateTab(key,{restore=true}={}){
+    if(!tabPanels.has(key))return;
+    if(activeTab&&document.body.classList.contains('case-flow-open')){
+      scrollPositions.set(activeTab,window.scrollY);
+      if(typeof writeRecordNow==='function')writeRecordNow();
+    }
+    activeTab=key;panel.dataset.activeTab=key;document.body.dataset.caseActiveTab=key;
+    for(const [id,tabPanel] of tabPanels){const selected=id===key;tabPanel.hidden=!selected;tabPanel.setAttribute('aria-labelledby',`case-tab-${id}`);if(selected)tabPanel.removeAttribute('tabindex');else tabPanel.removeAttribute('tabindex');}
+    for(const [id,button] of tabButtons){const selected=id===key;button.setAttribute('aria-selected',String(selected));button.tabIndex=selected?0:-1;}
+    assessmentPanel.style.display=key==='assessment'?'block':'none';
+    reportPanel.style.display=key==='report'?'block':'none';
+    const selectedPanel=tabPanels.get(key);
+    const lastContent=selectedPanel.querySelectorAll('.case-section');
+    for(const section of form.querySelectorAll('.case-section'))section.removeAttribute('data-flow-tab-tail');
+    (lastContent.length?lastContent[lastContent.length-1]:selectedPanel).setAttribute('data-flow-tab-tail','true');
+    document.getElementById('case-tab-position').textContent=`${tabs.findIndex(tab=>tab.key===key)+1} of ${tabs.length}`;
+    document.getElementById('case-tab-back').disabled=key===tabs[0].key;
+    document.getElementById('case-tab-next').disabled=key===tabs[tabs.length-1].key;
+    if(key==='report')window.sicuDailyReportRefresh?.();
+    tabButtons.get(key).scrollIntoView({block:'nearest',inline:'nearest'});
+    if(restore)window.scrollTo(0,scrollPositions.get(key)||0);
+  }
+  function moveTab(delta){const index=tabs.findIndex(tab=>tab.key===activeTab);activateTab(tabs[Math.max(0,Math.min(tabs.length-1,index+delta))].key);}
+  document.getElementById('case-tab-back').addEventListener('click',()=>moveTab(-1));
+  document.getElementById('case-tab-next').addEventListener('click',()=>moveTab(1));
+  tabRoot.addEventListener('keydown',event=>{if(event.key==='ArrowRight')moveTab(1);else if(event.key==='ArrowLeft')moveTab(-1);else if(event.key==='Home')activateTab(tabs[0].key);else if(event.key==='End')activateTab(tabs[tabs.length-1].key);});
+  window.sicuFormTabs={activate:key=>activateTab(key,{restore:false}),get active(){return activeTab;}};
+  activateTab('encounter',{restore:false});
 
   const labs={
     'Hematology / coagulation':['Hematocrit (Hct)','Hemoglobin (Hgb)','International normalized ratio (INR)','Mean corpuscular hemoglobin (MCH)','Mean corpuscular hemoglobin concentration (MCHC)','Mean corpuscular volume (MCV)','Partial thromboplastin time (PTT)','Platelet count (Plt)','Prothrombin time (PT)','Red blood cell count (RBC)','Reticulocyte percent','White blood cell count (WBC)'],
@@ -1065,15 +1132,15 @@ body.sicu-present>header,body.sicu-present .help,body.sicu-present .tag,body.sic
   for(let i=0;i<5;i++){const tr=document.createElement('tr');const device=document.createElement('td');device.textContent=`Device ${i+1}`;device.className='case-timepoint';tr.append(device);for(const [key,label] of [['device','Monitoring device'],['rationale','Rationale'],['invasive','Invasive?'],['low','Low alarm settings'],['high','High alarm settings']]){const td=document.createElement('td');td.dataset.label=label;let control;if(key==='invasive'){control=document.createElement('select');control.innerHTML='<option value="">Choose</option><option>Yes</option><option>No</option>'; }else{control=document.createElement('input');control.placeholder=label;}control.name=`packet.monitoring.${i}.${key}`;control.dataset.printLabel=`${label} · device ${i+1}`;td.append(control);tr.append(td);}monitorBody.append(tr);}
 
   const patientNumber=form.querySelector('[name="packet.patientNumber"]');
-  const storageKey=n=>`sicuCasePacketPatient${n}`;let currentPatient='1',currentSeedVersion=null,saveTimer=0;
-  function writeRecordNow(){try{const values={};for(const el of form.elements)if(el.name)values[el.name]=el.value;const record={values,medicationCount:medList.children.length};if(currentSeedVersion!==null)record.seedVersion=currentSeedVersion;localStorage.setItem(storageKey(currentPatient),JSON.stringify(record));status.textContent='Saved on this device';return true;}catch{status.textContent='Local autosave unavailable';return false;}}
-  function saveRecord(){clearTimeout(saveTimer);saveTimer=setTimeout(()=>{saveTimer=0;writeRecordNow();},250);}
+  const storageKey=n=>`sicuCasePacketPatient${n}`,editTimeKey=n=>`sicuCasePacketEditedAt${n}`;let currentPatient='1',currentSeedVersion=null,saveTimer=0,pendingEdited=false,pendingEditAt=0;
+  function writeRecordNow({edited=false,editedAt=Date.now()}={}){try{const values={};for(const el of form.elements)if(el.name)values[el.name]=el.value;const record={values,medicationCount:medList.children.length};if(currentSeedVersion!==null)record.seedVersion=currentSeedVersion;localStorage.setItem(storageKey(currentPatient),JSON.stringify(record));status.textContent='Saved on this device';if(edited){try{localStorage.setItem(editTimeKey(currentPatient),String(editedAt));}catch{}try{window.dispatchEvent(new CustomEvent('sicu-local-draft-changed',{detail:{slot:currentPatient,record,editedAt}}));}catch{}}return true;}catch{status.textContent='Local autosave unavailable';return false;}}
+  function saveRecord(edited=true){clearTimeout(saveTimer);if(edited){pendingEdited=true;pendingEditAt=Date.now();}status.textContent='Saving…';saveTimer=setTimeout(()=>{saveTimer=0;const isEdited=pendingEdited,editedAt=pendingEditAt;pendingEdited=false;pendingEditAt=0;writeRecordNow({edited:isEdited,editedAt});},250);}
+  function flushRecord(){clearTimeout(saveTimer);saveTimer=0;const isEdited=pendingEdited,editedAt=pendingEditAt;pendingEdited=false;pendingEditAt=0;return writeRecordNow({edited:isEdited,editedAt});}
   function restoreRenamedLabKeys(values){const restored={...values};for(const suffix of ['value','reference']){const original=`packet.lab.hematology-coagulation.platelet-count-plt.${suffix}`,renamed=`packet.lab.hematology-coagulation.platelet-count.${suffix}`;if(!Object.prototype.hasOwnProperty.call(restored,original)&&Object.prototype.hasOwnProperty.call(restored,renamed))restored[original]=restored[renamed];}return restored;}
   function loadRecord(n){form.reset();medList.replaceChildren();addMedicationButton.click();currentPatient=n;patientNumber.value=n;let saved=null;try{saved=JSON.parse(localStorage.getItem(storageKey(n))||'null');}catch{}currentSeedVersion=saved?.seedVersion??null;if(saved){for(let i=1;i<Math.min(saved.medicationCount||1,20);i++)addMedicationButton.click();const recordValues=restoreRenamedLabKeys(saved.values||{});for(const [name,value] of Object.entries(recordValues)){const el=form.elements.namedItem(name);if(el&&'value'in el)el.value=value;}}patientNumber.value=n;status.textContent=saved?'Draft restored from this device':'New local draft';}
-  window.sicuCaseDraftController={replaceFromCloud(n,record){if(currentPatient!==String(n))throw new Error('record-selection-changed');if(saveTimer!==0){clearTimeout(saveTimer);saveTimer=0;if(!writeRecordNow())throw new Error('local-save-failed');}if(currentPatient!==String(n))throw new Error('record-selection-changed');localStorage.setItem(storageKey(n),JSON.stringify(record));loadRecord(String(n));}};
-  slot.addEventListener('change',()=>{saveRecord();setTimeout(()=>loadRecord(slot.value),300);});
+  window.sicuCaseDraftController={flush:flushRecord,replaceFromCloud(n,record){if(currentPatient!==String(n))throw new Error('record-selection-changed');if(saveTimer!==0){clearTimeout(saveTimer);saveTimer=0;const isEdited=pendingEdited,editedAt=pendingEditAt;pendingEdited=false;pendingEditAt=0;if(!writeRecordNow({edited:isEdited,editedAt}))throw new Error('local-save-failed');}if(currentPatient!==String(n))throw new Error('record-selection-changed');localStorage.setItem(storageKey(n),JSON.stringify(record));loadRecord(String(n));}};
+  slot.addEventListener('change',()=>{saveRecord(false);setTimeout(()=>loadRecord(slot.value),300);});
   form.addEventListener('input',saveRecord);form.addEventListener('change',saveRecord);
-  document.getElementById('case-close').addEventListener('click',saveRecord);
   loadRecord(slot.value);
 
   function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
@@ -1142,8 +1209,6 @@ body.sicu-present>header,body.sicu-present .help,body.sicu-present .tag,body.sic
 })();
 </script>
 
-<script type="module" src="./sicu-cloud-sync.js"></script>
-
 <style>
 #sicu-monitor{right:12px!important;bottom:72px!important;width:min(340px,calc(100vw - 24px))!important;z-index:12!important;pointer-events:auto!important}
 #sicu-monitor.sicu-monitor-collapsed{height:48px;border-width:2px!important;border-radius:10px!important}
@@ -1209,7 +1274,7 @@ body[data-room-failed="true"] #sicu-panel-shortcuts{bottom:10px!important}
  if(ip&&cb){ip.style.display='';ip.classList.add('sicu-tucked');cb.onclick=()=>{const open=ip.classList.toggle('sicu-tucked')===false;cb.setAttribute('aria-expanded',String(open));};}
  if(ep&&eb){ep.style.display='';ep.classList.add('sicu-tucked');eb.onclick=()=>{const open=ep.classList.toggle('sicu-tucked')===false;eb.setAttribute('aria-expanded',String(open));};}
  const sync=document.getElementById('case-cloud-sync');if(sync&&!document.getElementById('case-settings')){const s=document.createElement('details');s.id='case-settings';s.innerHTML='<summary>Settings</summary>';sync.parentNode.insertBefore(s,sync);s.append(sync);}
- const root=document.getElementById('case-mobile-tabs');if(root&&!root.querySelector('.case-more-tabs')){const more=document.createElement('div');more.className='case-more-tabs';more.innerHTML='<button type="button" id="case-tabs-prev" aria-label="Previous section">‹</button><button type="button" id="case-tabs-next">More ›</button>';root.prepend(more);const bs=[...root.querySelectorAll('[role=tab]')];const move=d=>{const i=bs.findIndex(b=>b.getAttribute('aria-selected')==='true'),n=(Math.max(0,i)+d+bs.length)%bs.length;bs[n].click();bs[n].scrollIntoView({block:'nearest',inline:'nearest'});bs[n].focus();};more.querySelector('#case-tabs-prev').onclick=()=>move(-1);more.querySelector('#case-tabs-next').onclick=()=>move(1);root.addEventListener('keydown',e=>{if(e.key==='ArrowRight')move(1);else if(e.key==='ArrowLeft')move(-1);else if(e.key==='Home'){bs[0].click();bs[0].focus()}else if(e.key==='End'){bs[bs.length-1].click();bs[bs.length-1].focus()}});}
+ // The full-page form uses its own six-tab navigation and keyboard handling.
  let last=0,lastText='';const started=Date.now();setInterval(()=>{const v=window.sicu?.state?.patient?.vitals;if(!v)return;const vals={hr:Math.round(v.hr),spo2:Math.round(v.spo2),sys:Math.round(v.nibpSys),dia:Math.round(v.nibpDia),rr:Math.round(v.rr)};for(const [id,t] of [['strip-hr','HR '+vals.hr],['strip-spo2','SpO₂ '+vals.spo2+'%'],['strip-bp','BP '+vals.sys+'/'+vals.dia],['strip-rr','RR '+vals.rr]]){const el=document.getElementById(id);if(el)el.textContent=t;}const text='HR '+vals.hr+' · SpO₂ '+vals.spo2+'% · BP '+vals.sys+'/'+vals.dia+' · RR '+vals.rr,now=Date.now();if(now-last>=15000&&text!==lastText){const list=document.getElementById('sicu-event-list');if(list){const li=document.createElement('li');li.textContent=String(Math.floor((now-started)/60000)).padStart(2,'0')+':'+String(Math.floor((now-started)/1000)%60).padStart(2,'0')+'  Vitals trend · '+text;list.append(li);while(list.children.length>40)list.firstChild.remove();}lastText=text;last=now;}},1000);
 })();
 </script>
@@ -1251,7 +1316,7 @@ body.sicu-present #sicu-room-menu-trigger{z-index:29}
       <button type="button" data-room-action="view-room">Room view</button><button type="button" data-room-action="view-bed">Bedside view</button><button type="button" data-room-action="view-headwall">Headwall view</button><button type="button" data-room-action="reset-view">Reset view</button><button type="button" data-room-action="fullscreen">Full screen</button>
     </div></section>
     <section class="sicu-menu-group" aria-labelledby="sicu-menu-documentation"><h3 id="sicu-menu-documentation">Documentation</h3><div class="sicu-menu-actions">
-      <button type="button" data-room-action="case">Case presentation</button><button type="button" data-room-action="assessment">Patient assessment</button><button type="button" data-room-action="report">Daily report</button>
+      <button type="button" data-room-action="case">Open documentation</button>
     </div></section>
     <section class="sicu-menu-group" aria-labelledby="sicu-menu-room-actions"><h3 id="sicu-menu-room-actions">Room actions</h3><div class="sicu-menu-actions">
       <button type="button" data-room-action="controls">Simulator controls</button><button type="button" data-room-action="events">Event log</button><button type="button" data-room-action="present">Presentation mode</button>
@@ -1282,5 +1347,76 @@ body.sicu-present #sicu-room-menu-trigger{z-index:29}
   document.addEventListener('keydown',event=>{if(event.key==='Escape'&&menu.open)closeMenu(false);});
 })();
 </script>
+<style id="sicu-full-form-flow-styles">
+body.case-flow-open{min-height:100dvh;overflow-x:hidden!important;overflow-y:auto!important;background:#f7f7f3}
+body.case-flow-open>header,body.case-flow-open .help,body.case-flow-open .tag,body.case-flow-open .toolbar,body.case-flow-open #sicu-clock,body.case-flow-open #sicu-monitor,body.case-flow-open #sicu-room-menu-dock,body.case-flow-open #sicu-room-menu,body.case-flow-open #sicu-interventions,body.case-flow-open #sicu-event-panel,body.case-flow-open #sicu-panel-shortcuts,body.case-flow-open #sicu-fallback-actions,body.case-flow-open #sicu-assessment-toggle,body.case-flow-open #sicu-report-toggle,body.case-flow-open #sicu-present-toggle,body.case-flow-open #case-toggle,body.case-flow-open #loading,body.case-flow-open canvas{display:none!important}
+body.case-flow-open #case-panel{display:block;position:relative;inset:auto;z-index:auto;width:100%;height:auto;min-height:100dvh;max-height:none;overflow:visible;margin:0;padding:16px clamp(16px,3vw,36px) 0;border:0;border-radius:0;background:#f7f7f3;box-shadow:none;color:#292b2b}
+body.case-flow-open #case-panel[hidden]{display:none!important}
+.case-flow-header{position:static;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;padding:4px 0 12px;background:#f7f7f3;pointer-events:auto}
+.case-flow-title{min-width:0}.case-flow-title h2{font-size:22px;line-height:1.2;font-weight:600;margin:0}.case-flow-title .case-kicker{margin:0 0 4px}
+.case-top-actions{display:flex;flex:1 1 100%;flex-wrap:wrap;align-items:center;gap:8px;margin:0}
+.case-top-actions button{min-height:44px;padding:8px 12px;border:1px solid #cfd6cf;border-radius:8px;background:#fff;color:#26322b;font:600 14px Arial,sans-serif;touch-action:manipulation}
+#case-close-x{min-width:44px;font-size:22px;line-height:1}#case-close{background:#304d43;color:#fff;border-color:#304d43}
+#case-save-status{min-width:0;flex:1 1 150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;color:#536257}
+#case-panel .case-patient-picker{font-size:14px}#case-patient-slot{min-height:44px;font-size:16px}
+#case-panel .case-note{margin:4px 0 7px;font-size:14px;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.case-student-lock-notice{margin:0 0 8px;padding:8px 10px;border-left:3px solid #597566;background:#eef3ed;color:#39483e;font-size:14px;line-height:1.35}
+body.case-flow-open .case-scenario-notice{display:block;margin:0 0 10px;padding:8px 10px;border-left:3px solid #b17a40;background:#f3eee4;color:#50483b;font-size:14px;line-height:1.35}
+body.case-flow-open #case-mobile-tabs{position:sticky;top:0;z-index:30;display:flex;gap:6px;margin:0 -4px 14px;padding:7px 4px;background:#f7f7f3;border-bottom:1px solid #d7ddd6;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:thin}
+body.case-flow-open #case-mobile-tabs button{flex:0 0 auto;min-height:46px;padding:10px 13px;border:1px solid #cbd4cb;border-radius:9px;background:#fff;color:#34463e;font:600 14px Arial,sans-serif;touch-action:manipulation}
+body.case-flow-open #case-mobile-tabs button[aria-selected="true"]{background:#304d43;color:#fff;border-color:#304d43}
+body.case-flow-open #case-form{display:block;overflow:visible}
+body.case-flow-open .case-tab-panel[hidden],body.case-flow-open .case-section[hidden]{display:none!important}
+body.case-flow-open .case-tab-panel{display:block;min-width:0}
+body.case-flow-open .case-section{padding:18px 0;border-bottom:1px solid #d8ddd7;scroll-margin-top:64px}
+body.case-flow-open .case-section h3{font-size:19px;line-height:1.3;margin:0 0 12px}
+body.case-flow-open .case-section h4{font-size:16px;margin:20px 0 10px}
+body.case-flow-open .case-section label{font-size:14px;line-height:1.4}
+body.case-flow-open .case-section input,body.case-flow-open .case-section textarea,body.case-flow-open .case-section select,body.case-flow-open .case-med-row input{width:100%;min-width:0;min-height:46px;padding:9px 10px;font-size:16px;line-height:1.4}
+body.case-flow-open .case-section textarea{min-height:90px}
+body.case-flow-open .case-help{font-size:14px;line-height:1.45}
+body.case-flow-open .case-grid,body.case-flow-open .case-grid-wide{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+body.case-flow-open .case-grid-wide{margin-top:12px}
+body.case-flow-open .case-table-scroll{overflow:visible!important}
+body.case-flow-open .case-table{width:100%;min-width:0;border-collapse:collapse}
+body.case-flow-open #case-tabpanel-presentation{min-width:0}
+body[data-case-active-tab="assessment"].case-flow-open #sicu-assessment-panel{display:block!important;position:static!important;inset:auto!important;width:100%!important;max-height:none!important;overflow:visible!important;margin:10px 0 18px;padding:14px!important;border:1px solid #dfe2db!important;border-radius:12px!important;background:#fff!important;box-shadow:none!important;z-index:auto!important}
+body[data-case-active-tab="report"].case-flow-open #sicu-report-panel{display:block!important;position:static!important;inset:auto!important;width:100%!important;max-height:none!important;overflow:visible!important;margin:10px 0 18px;padding:14px!important;border:1px solid #dfe2db!important;border-radius:12px!important;background:#fff!important;box-shadow:none!important;z-index:auto!important}
+body.case-flow-open #case-flow-footer{position:sticky;bottom:0;z-index:35;display:grid;grid-template-columns:minmax(88px,1fr) auto minmax(88px,1fr);align-items:center;gap:10px;margin:0 calc(-1 * clamp(16px,3vw,36px));padding:10px clamp(16px,3vw,36px) calc(10px + env(safe-area-inset-bottom));border-top:1px solid #d7ddd6;background:#f7f7f3f5;backdrop-filter:blur(10px)}
+body.case-flow-open #case-flow-footer button{min-height:46px;padding:9px 14px;border:1px solid #cbd4cb;border-radius:9px;background:#fff;color:#26322b;font:600 14px Arial,sans-serif;touch-action:manipulation}
+body.case-flow-open #case-flow-footer #case-tab-next{justify-self:end;background:#304d43;color:#fff;border-color:#304d43}
+body.case-flow-open #case-flow-footer button:disabled{opacity:.45}
+body.case-flow-open #case-tab-position{font-size:13px;color:#536257}
+body.case-flow-open #case-add-med,body.case-flow-open .case-med-row>button,body.case-flow-open #sicu-copy-summary,body.case-flow-open #sicu-copy-report{min-height:46px;padding:10px 12px;font:600 14px Arial,sans-serif;touch-action:manipulation}
+body.case-flow-open .case-section[data-flow-tab-tail="true"]{padding-bottom:112px}
+body.case-flow-open #case-assessment-tab{padding-top:0}
+@media(max-width:1100px){
+ body.case-flow-open .case-table{display:block}
+ body.case-flow-open .case-table thead{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+ body.case-flow-open .case-table tbody{display:grid;gap:12px}
+ body.case-flow-open .case-table tr{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:12px;border:1px solid #dfe2dc;border-radius:10px;background:#fff}
+ body.case-flow-open .case-table td{display:block;min-width:0!important;padding:0;border:0}
+ body.case-flow-open .case-table td:first-child{grid-column:1/-1;font-size:14px}
+ body.case-flow-open .case-table td[data-label]::before{content:attr(data-label);display:block;margin-bottom:4px;color:#606b63;font-size:12px;line-height:1.25}
+ body.case-flow-open .case-table input,body.case-flow-open .case-table textarea{width:100%;min-width:0;min-height:46px;font-size:16px}
+}
+@media(max-width:700px){
+ body.case-flow-open #case-panel{padding:calc(10px + env(safe-area-inset-top)) calc(12px + env(safe-area-inset-right)) 0 calc(12px + env(safe-area-inset-left))}
+ .case-flow-header{align-items:flex-start;gap:8px;padding-bottom:8px}
+ .case-flow-title{flex:1 1 100%;}
+ .case-flow-title h2{font-size:20px}
+ .case-top-actions{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:6px;width:100%}
+ .case-patient-picker{grid-column:1/-1;justify-content:space-between}
+ #case-save-status{grid-column:1;grid-row:2;font-size:13px}
+ #case-print{grid-column:2;grid-row:2}
+ #case-close-x{grid-column:3;grid-row:2}
+ #case-close{grid-column:1/-1;grid-row:3}
+ body.case-flow-open .case-grid,body.case-flow-open .case-grid-wide{grid-template-columns:minmax(0,1fr)}
+ body.case-flow-open .case-med-row{grid-template-columns:minmax(0,1fr);gap:9px}
+ body.case-flow-open #case-flow-footer{margin-left:-12px;margin-right:-12px;padding-left:12px;padding-right:12px}
+ body.case-flow-open .case-note{font-size:13px}
+}
+</style>
+<script type="module" src="./sicu-cloud-sync.js"></script>
 </body>
 </html>
