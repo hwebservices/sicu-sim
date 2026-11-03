@@ -264,8 +264,7 @@ async function run() {
   async function enableAutomaticSync(target) {
     await target.signIn();
     target.elements.get('case-cloud-fictional').checked = true;
-    target.elements.get('case-cloud-autosync').checked = true;
-    target.elements.get('case-cloud-autosync').handlers.change();
+    target.elements.get('case-cloud-fictional').handlers.change();
     await target.settle();
   }
   function editSyntheticDraft(target, title, editedAt) {
@@ -292,8 +291,7 @@ async function run() {
   await preOptInApp.signIn();
   preOptInApp.elements.get('case-cloud-fictional').checked = true;
   preOptInApp.title.value = 'existing local synthetic edit';
-  preOptInApp.elements.get('case-cloud-autosync').checked = true;
-  preOptInApp.elements.get('case-cloud-autosync').handlers.change();
+  preOptInApp.elements.get('case-cloud-fictional').handlers.change();
   await preOptInApp.settle();
   const preOptInConsent = JSON.parse(preOptInApp.storage.get('sicuCloudAutoSyncConsentV1:owner-uid:patient-1'));
   preOptInApp.emit('sicu-local-draft-changed', {
@@ -354,13 +352,14 @@ async function run() {
   const wrongAccountApp = makeHarness({ initialCloud: null });
   await wrongAccountApp.signInAs({ uid: 'other-uid', email: 'other@example.com', emailVerified: true });
   assert.equal(wrongAccountApp.elements.get('case-cloud-signin').hidden, false, 'a non-owner account is rejected and remains signed out');
-  assert.equal(wrongAccountApp.elements.get('case-cloud-autosync').disabled, true);
+  assert.equal(wrongAccountApp.elements.get('case-cloud-fictional').checked, false);
   assert.equal(wrongAccountApp.reads, 0, 'a non-owner account cannot read the cloud copy');
   assert.equal(wrongAccountApp.writes, 0, 'a non-owner account cannot write a cloud copy');
 
   const html = fs.readFileSync(new URL('../index.html', `file://${__filename}`), 'utf8');
   assert.match(html, /<script type="module" src="\.\/sicu-cloud-sync\.js"><\/script>/, 'the full-form branch loads the approved owner-only sync module');
-  assert.match(html, /id="case-cloud-autosync"/, 'the record-level automatic sync choice is present');
+  assert.doesNotMatch(html, /case-cloud-autosync/, 'automatic saving has no separate manual sync switch');
+  assert.match(html, /id="case-cloud-fictional"/, 'fictional-data confirmation remains the data-safety gate');
   assert.match(html, /sicu-local-draft-changed/, 'a saved user edit notifies the sync queue');
   const draftController = html.slice(html.indexOf('window.sicuCaseDraftController='), html.indexOf("slot.addEventListener('change'"));
   assert.match(draftController, /clearTimeout\(saveTimer\);saveTimer=0;const isEdited=pendingEdited,editedAt=pendingEditAt;pendingEdited=false;pendingEditAt=0;if\(!writeRecordNow\(\{edited:isEdited,editedAt\}\)\)throw new Error\('local-save-failed'\)/);

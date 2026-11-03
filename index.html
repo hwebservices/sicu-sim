@@ -912,7 +912,7 @@ body.sicu-present>header,body.sicu-present .help,body.sicu-present .tag,body.sic
   <p class="case-note">Fictional teaching data only; never enter real patient information.</p>
   <details id="case-cloud-sync" style="margin:8px 0;padding:8px 10px;border:1px solid #c8d2cd;border-radius:8px;background:#fff">
     <summary style="cursor:pointer;font-weight:600;min-height:44px;display:flex;align-items:center">Private cloud sync</summary>
-    <p class="case-help">Owner-only sync for fictional teaching drafts. Existing local drafts stay on this device until you explicitly save or enable automatic sync for that record.</p>
+    <p class="case-help">Owner-only automatic sync for fictional teaching drafts. Existing local drafts stay on this device until you explicitly save them or make a new edit after confirming this record is fictional.</p>
     <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px">
       <button id="case-cloud-signin" type="button">Sign in with Google</button>
       <button id="case-cloud-signout" type="button" hidden>Sign out</button>
@@ -922,7 +922,6 @@ body.sicu-present>header,body.sicu-present .help,body.sicu-present .tag,body.sic
       <button id="case-cloud-replace" type="button" disabled hidden>Replace cloud draft</button>
     </div>
     <label style="display:flex;align-items:flex-start;gap:8px;margin:9px 0;font-size:12px"><input id="case-cloud-fictional" type="checkbox">I confirm this selected record contains fictional teaching data only and no real patient information or identifiers.</label>
-    <label style="display:flex;align-items:flex-start;gap:8px;margin:9px 0;font-size:12px"><input id="case-cloud-autosync" type="checkbox" disabled>Automatically save edits to my private account and safely restore newer cloud edits on this device.</label>
     <p id="case-cloud-status" role="status" aria-live="polite" class="case-help">Local autosave is active. Sign in to check for a private cloud copy.</p>
   </details>
   <p class="case-student-lock-notice">Student mode · Observation only. Pump-based medications/fluids and ventilator settings are locked; oxygen interface is visual-only.</p>

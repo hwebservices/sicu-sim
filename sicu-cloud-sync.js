@@ -40,7 +40,6 @@ const uploadButton = document.getElementById('case-cloud-upload');
 const downloadButton = document.getElementById('case-cloud-download');
 const replaceButton = document.getElementById('case-cloud-replace');
 const fictionalCheck = document.getElementById('case-cloud-fictional');
-const autoSyncCheck = document.getElementById('case-cloud-autosync');
 const status = document.getElementById('case-cloud-status');
 
 let user = null;
@@ -162,9 +161,21 @@ function isOnline() {
 
 function applyAutoSyncConsent({ preserveFictional = false } = {}) {
   const enabled = autoSyncEnabled();
-  autoSyncCheck.checked = enabled;
   if (enabled) fictionalCheck.checked = true;
   else if (!preserveFictional) fictionalCheck.checked = false;
+}
+
+function enableAutomaticSyncForCurrentRecord() {
+  if (!user || !fictionalCheck.checked) return false;
+  const key = consentKey(user.uid, selectedSlot());
+  if (readAutoConsent(user.uid, selectedSlot())) return true;
+  try {
+    localStorage.setItem(key, JSON.stringify({ version: 1, enabledAt: Date.now() }));
+    return true;
+  } catch (_) {
+    setStatus('Automatic sync could not be enabled on this device. Local autosave remains active.', true);
+    return false;
+  }
 }
 
 function setStatus(message, isError = false) {
@@ -183,7 +194,6 @@ function renderButtons() {
   downloadButton.disabled = !signedIn || !slotReady || syncBusy || !remoteExists || !remoteRecord || !['remote-ahead', 'conflict', 'in-sync'].includes(syncState);
   replaceButton.hidden = syncState !== 'conflict';
   replaceButton.disabled = !signedIn || !slotReady || syncBusy || !fictionalCheck.checked || syncState !== 'conflict';
-  autoSyncCheck.disabled = !signedIn || !slotReady || syncBusy || !fictionalCheck.checked;
 }
 
 function currentRelation() {
@@ -200,9 +210,9 @@ function currentRelation() {
 function describeState() {
   if (!user) return authNotice || 'Not signed in. Local autosave is still active.';
   switch (syncState) {
-    case 'new': return 'No cloud copy exists for this record. Existing local data stays here until an edit is made after automatic sync is enabled or you save it explicitly.';
+    case 'new': return 'No cloud copy exists for this record. Existing local data stays here until a new edit is made after fictional data is confirmed or you save it explicitly.';
     case 'in-sync': return 'This selected record matches its cloud copy.';
-    case 'local-ahead': return 'This device has newer edits. Automatic sync can save only edits made after it was enabled.';
+    case 'local-ahead': return 'This device has newer edits. Automatic sync saves edits made after fictional data was confirmed.';
     case 'remote-ahead': return 'The cloud copy has newer edits. Load it to this device, or keep local edits and check again.';
     case 'conflict': return 'Both copies may have changed. No copy was overwritten. Choose Load cloud, or explicitly replace cloud after checking this record.';
     case 'checking': return 'Checking the private cloud copy…';
@@ -436,39 +446,6 @@ function queueAutomaticDraft(event) {
   }
 }
 
-function toggleAutomaticSync() {
-  if (!user) {
-    autoSyncCheck.checked = false;
-    setStatus('Sign in with the owner account before enabling automatic sync.', true);
-    renderButtons();
-    return;
-  }
-  const key = consentKey(user.uid, selectedSlot());
-  if (autoSyncCheck.checked) {
-    if (!fictionalCheck.checked) {
-      autoSyncCheck.checked = false;
-      setStatus('Confirm this selected record is fictional before enabling automatic sync.', true);
-      renderButtons();
-      return;
-    }
-    try {
-      localStorage.setItem(key, JSON.stringify({ version: 1, enabledAt: Date.now() }));
-      setStatus('Automatic sync is enabled for this fictional record on this device. Existing local data will not upload until a later edit or explicit save.');
-      renderButtons();
-      void checkCloud();
-    } catch (_) {
-      autoSyncCheck.checked = false;
-      setStatus('Automatic sync could not be enabled on this device. Local autosave remains active.', true);
-      renderButtons();
-    }
-  } else {
-    try { localStorage.removeItem(key); }
-    catch (_) { autoSyncCheck.checked = true; setStatus('Automatic sync could not be disabled on this device.', true); }
-    if (!autoSyncCheck.checked) setStatus('Automatic sync is off. Local drafts and any queued copy remain on this device.');
-    renderButtons();
-  }
-}
-
 function confirmFictional() {
   if (!fictionalCheck.checked) {
     setStatus('Check the fictional-training-data confirmation before sending this record.', true);
@@ -639,17 +616,20 @@ checkButton.addEventListener('click', checkCloud);
 uploadButton.addEventListener('click', () => writeCloud());
 replaceButton.addEventListener('click', () => writeCloud({ overwrite: true }));
 downloadButton.addEventListener('click', loadCloud);
-autoSyncCheck.addEventListener('change', toggleAutomaticSync);
 fictionalCheck.addEventListener('change', () => {
-  if (!fictionalCheck.checked && autoSyncCheck.checked) {
+  if (!fictionalCheck.checked && user && autoSyncEnabled(user.uid, selectedSlot())) {
     try {
       localStorage.removeItem(consentKey(user.uid, selectedSlot()));
-      autoSyncCheck.checked = false;
-      setStatus('Automatic sync was turned off for this record. Any queued copy remains on this device.');
+      setStatus('Automatic saving is paused for this record. Any queued copy remains on this device.');
     } catch (_) {
       fictionalCheck.checked = true;
-      setStatus('Automatic sync could not be turned off on this device. The saved choice remains enabled.', true);
+      setStatus('Automatic saving could not be paused on this device. The saved choice remains enabled.', true);
     }
+  } else if (fictionalCheck.checked && user && enableAutomaticSyncForCurrentRecord()) {
+    setStatus('Automatic saving is active for this fictional record. Existing local data stays here until a new edit or explicit save.');
+    void checkCloud();
+  } else if (fictionalCheck.checked && !user) {
+    setStatus('Sign in with the owner account to automatically save new edits.');
   }
   renderButtons();
 });
@@ -690,6 +670,7 @@ onAuthStateChanged(auth, async (signedInUser) => {
     remoteRecord = null;
     remoteExists = false;
     remoteToken = null;
+    fictionalCheck.checked = false;
     setStatus(describeState());
     renderButtons();
     return;
@@ -710,7 +691,7 @@ onAuthStateChanged(auth, async (signedInUser) => {
   renderButtons();
   setStatus(autoSyncEnabled(user.uid, selectedSlot())
     ? `Signed in as ${allowedEmail}. Checking this record for safe automatic sync.`
-    : `Signed in as ${allowedEmail}. Local drafts remain on this device until you enable sync for a record.`);
+    : `Signed in as ${allowedEmail}. Confirm this record contains fictional data; new edits will then save automatically.`);
   if (autoSyncEnabled(user.uid, selectedSlot())) void checkCloud();
 });
 
