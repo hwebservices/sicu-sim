@@ -11,7 +11,6 @@
 </head>
 <body>
 <header><h1><span class="number">01</span>Surgical intensive care</h1><p>Educational SICU simulation · not for patient care</p></header>
-<div class="tag">Single patient room · 5 × 4 m</div>
 <nav class="toolbar" aria-label="Room views"><button data-view="room" class="active">Room</button><button data-view="bed">Bedside</button><button data-view="headwall">Headwall</button><div class="separator"></div><button id="reset" title="Reset camera (R)">Reset</button><button id="fullscreen" title="Fullscreen">Full screen</button></nav>
 <div id="loading" role="status"><b>SICU / 01</b><span id="loadstatus">Preparing the room…</span><div id="error"></div></div>
 <noscript>This interactive room requires JavaScript.</noscript>
@@ -792,7 +791,7 @@ body.sicu-present>header,body.sicu-present .help,body.sicu-present .tag,body.sic
     const {v,map,pressor,insulin,antibiotic,assessments} = state;
     const content = {
       'Cardiovascular':`HR ${Math.round(v.hr)} bpm · NIBP ${Math.round(v.nibpSys)}/${Math.round(v.nibpDia)} mmHg · MAP ${map.toFixed(1)} mmHg · Pressor active: ${pressor ? 'Yes' : 'No'}`,
-      'Respiratory':`SpO₂ ${Math.round(v.spo2)}% · RR ${Math.round(v.rr)}/min · Oxygen device: ${window.sicu.state.devices.oxygen.label} · FiO₂ setting: not modeled · PEEP: not modeled`,
+      'Respiratory':`SpO₂ ${Math.round(v.spo2)}% · RR ${Math.round(v.rr)}/min · Oxygen device: ${window.sicu.state.devices.oxygen.label}`,
       'Infectious Disease':`Temp ${v.temp.toFixed(1)} °C · Antibiotics given: ${antibiotic}`,
       'Endocrine':`Glucose ${Math.round(v.glucose)} mg/dL · Insulin active: ${insulin ? 'Yes' : 'No'}`
     };
