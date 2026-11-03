@@ -806,10 +806,15 @@ body.sicu-present>header,body.sicu-present .help,body.sicu-present .tag,body.sic
       elements.draft.hidden = !lines.length;
     }
   }
+  function syncCasePresentationToggle() {
+    const caseToggle = document.getElementById('case-toggle');
+    if (caseToggle) caseToggle.hidden = panel.style.display === 'block';
+  }
   toggle.addEventListener('click', () => {
     const open = panel.style.display !== 'block';
     panel.style.display = open ? 'block' : 'none';
     toggle.setAttribute('aria-expanded',String(open));
+    syncCasePresentationToggle();
   });
   present.addEventListener('click', () => {
     const enabled = !document.body.classList.contains('sicu-present');
@@ -823,13 +828,14 @@ body.sicu-present>header,body.sicu-present .help,body.sicu-present .tag,body.sic
       panel.style.display = assessmentWasOpen ? 'block' : 'none';
       toggle.setAttribute('aria-expanded',String(assessmentWasOpen));
     }
+    syncCasePresentationToggle();
   });
   function summaryText() {
     const state = currentState();
     if (!state) return '';
     return systems.map(system => {
       const elements = rowElements.get(system.name);
-      const values = elements.values.hidden ? elements.unmodeled.textContent : elements.values.textContent;
+      const values = elements.values.hidden ? '' : elements.values.textContent;
       const assessment = elements.draft.hidden ? '' : elements.draft.textContent;
       return [system.name,values,assessment,`Plan: ${elements.plan.value}`].filter(Boolean).join('\n');
     }).join('\n\n') + '\n\nEvent log\n' + (state.log.length ? state.log.join('\n') : 'No events recorded');
