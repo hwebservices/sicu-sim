@@ -381,7 +381,9 @@ async function run() {
   assert.doesNotMatch(html, /case-cloud-autosync/, 'automatic saving has no separate manual sync switch');
   assert.match(html, /id="case-cloud-fictional"/, 'fictional-data confirmation remains the data-safety gate');
   assert.match(html, /sicu-local-draft-changed/, 'a saved user edit notifies the sync queue');
-  const draftController = html.slice(html.indexOf('window.sicuCaseDraftController='), html.indexOf("slot.addEventListener('change'"));
+  const draftControllerStart = html.indexOf('window.sicuCaseDraftController=');
+  const draftControllerEnd = html.indexOf("slot.addEventListener('change'", draftControllerStart);
+  const draftController = html.slice(draftControllerStart, draftControllerEnd);
   assert.match(draftController, /clearTimeout\(saveTimer\);saveTimer=0;const isEdited=pendingEdited,editedAt=pendingEditAt;pendingEdited=false;pendingEditAt=0;if\(!writeRecordNow\(\{edited:isEdited,editedAt\}\)\)throw new Error\('local-save-failed'\)/);
   assert.match(html, /pendingEditAt=Date\.now\(\)/, 'edit time is captured before the debounce so pre-opt-in edits cannot be uploaded');
   assert.ok(draftController.indexOf('writeRecordNow()') < draftController.indexOf('localStorage.setItem(storageKey(n),JSON.stringify(record))'), 'pending local saves flush before the cloud record replaces them');

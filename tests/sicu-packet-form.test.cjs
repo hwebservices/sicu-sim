@@ -7,7 +7,7 @@ const sync = fs.readFileSync(new URL('../sicu-cloud-sync.js', `file://${__filena
 const inlineScripts = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)].map(match => match[1]);
 
 function has(source, pattern, message) {
-  assert.match(source, pattern, message);
+  assert.equal(pattern.test(source), true, message);
 }
 
 // The Today row is part of the encounter packet and must remain student-editable.
@@ -25,7 +25,7 @@ for (const name of [
   'packet.emce.icuHindered', 'packet.transport.scopeReview.',
 ]) assert.ok(html.includes(name), `missing packet field ${name}`);
 has(html, /sexReference/, 'lab form requests sex-specific reference ranges where listed');
-has(html, /function setMonitors[\s\S]*?\['recordedFrom'/, 'sample monitoring rows include provenance');
+has(html, /function addMonitoringRow\(\)[\s\S]*?\['device','Monitoring device'\],\['recordedFrom','Observed in'\]/, 'monitor rows include provenance');
 has(html, /function addMonitoringRow[\s\S]*?function addScopeReviewRow/, 'monitoring and transport rows can be added dynamically');
 has(html, /function reindexRows\(list,prefix\)/, 'medication and drip fields reindex after deletion');
 has(html, /restoredCount=\(count,fallback\)=>Number\.isInteger\(count\)&&count>=0\?count:fallback/, 'draft restoration retains the complete saved row count');
@@ -68,5 +68,37 @@ const largeDraft = { values: { 'packet.patientNumber': '1' }, medicationCount: 1
 const validationContext = vm.createContext({ largeDraft });
 vm.runInContext(`${validation}\nglobalThis.valid = isValidPacketRecord(largeDraft, '1');`, validationContext);
 assert.equal(validationContext.valid, true, 'legacy cloud record with rows above new-entry limits remains restorable');
+
+// The re-scoped product has exactly two patient slots and no seeded scenario products.
+assert.equal((html.match(/<option value="[12]">Patient [12]<\/option>/g) || []).length, 4, 'room and form selectors each expose only Patient 1 and Patient 2');
+assert.equal(/Scenario ·|Shockable cardiac arrest|Acute ischemic stroke|Severe DKA|septicShock|data-intervention=/.test(html), false, 'no fictional scenario product or clinical simulator controls remain');
+assert.match(html, /Patient 1 · Adult SICU trauma-abdomen course/, 'Patient 1 seed uses only the approved case shape');
+assert.match(html, /'medications\.0\.pattern':'Scheduled','medications\.1\.pattern':'PRN'/, 'Patient 1 seed shows scheduled and PRN structure without inventing drug details');
+assert.match(html, /leave unverified values blank/i, 'Patient 1 seed does not invent clinical values');
+assert.match(html, /sicu-room-patient-slot/, 'the room provides a patient switcher');
+assert.match(html, /packet.course.procedures/, 'procedure timeline is captured in the packet');
+assert.match(html, /packet.course.ventilatorTimeline/, 'ventilator course is captured in the packet');
+assert.match(html, /vitals.row\$\{index\}.hospitalDay/, 'vitals snapshots support hospital-day numbering');
+assert.match(html, /Recorded vitals snapshots[\s\S]*?Medications[\s\S]*?IV drips[\s\S]*?Procedures and interventions[\s\S]*?Ventilator course/, 'presentation view covers patient-specific progress');
+const seedScript = inlineScripts.find(script => script.includes("const key='sicuCasePacketPatient1'"));
+assert.ok(seedScript, 'Patient 1 case-shape seed script exists');
+const seedStore = new Map();
+const seedContext = vm.createContext({
+  localStorage: { getItem: key => seedStore.get(key) ?? null, setItem: (key, value) => seedStore.set(key, value) },
+});
+vm.runInContext(seedScript, seedContext);
+const seededPatient1 = JSON.parse(seedStore.get('sicuCasePacketPatient1'));
+assert.equal(seededPatient1.values['vitals.row0.0'], undefined, 'Patient 1 seed does not invent snapshot values');
+assert.equal(seededPatient1.values['packet.course.procedures'], undefined, 'Patient 1 seed does not invent procedures');
+assert.equal(seededPatient1.values['packet.course.ventilatorTimeline'], undefined, 'Patient 1 seed does not invent ventilator progression');
+assert.equal(seededPatient1.values['medications.0.drug'], undefined, 'Patient 1 seed does not invent medication names or doses');
+assert.equal(seededPatient1.values['medications.0.pattern'], 'Scheduled');
+assert.equal(seededPatient1.values['medications.1.pattern'], 'PRN');
+const preservedStore = new Map([['sicuCasePacketPatient1', JSON.stringify({values:{diagnosis:'existing local draft'}})]]);
+vm.runInContext(seedScript, vm.createContext({localStorage:{getItem:key=>preservedStore.get(key)??null,setItem:(key,value)=>preservedStore.set(key,value)}}));
+assert.equal(JSON.parse(preservedStore.get('sicuCasePacketPatient1')).values.diagnosis, 'existing local draft', 'existing Patient 1 draft is never overwritten by seed');
+
+assert.match(html, /#case-cloud-sync #case-cloud-check,#case-cloud-sync #case-cloud-upload,#case-cloud-sync #case-cloud-download,#case-cloud-sync #case-cloud-replace\{display:none!important\}/, 'manual cloud-sync actions are hidden from the product');
+assert.match(html, /<section id="case-cloud-sync"/, 'cloud sign-in and fictional confirmation remain available without a manual sync panel');
 
 console.log('SICU packet form structure regression passed.');
