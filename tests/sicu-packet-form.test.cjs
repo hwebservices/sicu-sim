@@ -144,4 +144,63 @@ assert.equal(presentationNodes.get('sicu-presentation-panel').hidden,true,'prese
 assert.match(html, /#case-cloud-sync #case-cloud-check,#case-cloud-sync #case-cloud-upload,#case-cloud-sync #case-cloud-download,#case-cloud-sync #case-cloud-replace\{display:none!important\}/, 'manual cloud-sync actions are hidden from the product');
 assert.match(html, /<section id="case-cloud-sync"/, 'cloud sign-in and fictional confirmation remain available without a manual sync panel');
 
+// The form close path saves first, hides the documentation UI, and restores
+// the room chrome; this is source-level coverage, not a live animation check.
+const formFlowScript = inlineScripts.find(script => script.includes('function close(fromPopstate=false)') && script.includes("body.classList.add('case-flow-open')"));
+assert.ok(formFlowScript, 'documentation flow controller exists');
+const closeStart = formFlowScript.indexOf('function close(fromPopstate=false)');
+const closeEnd = formFlowScript.indexOf('\n  }', closeStart) + 4;
+const closeFunction = formFlowScript.slice(closeStart, closeEnd);
+assert.match(closeFunction, /sicuCaseDraftController\?\.flush\?\.\(\)/, 'closing flushes the local draft');
+assert.match(closeFunction, /panel\.hidden=true;document\.body\.classList\.remove\('case-flow-open'\)/, 'closing hides the form and removes room-hiding state');
+assert.match(closeFunction, /sicu-room-menu-trigger.*?\.focus\(\)/, 'closing returns focus to the room menu');
+assert.match(html, /body\.case-flow-open[^}]*canvas\{display:none!important\}/, 'room canvas is hidden only while the form is open');
+
+// Execute the printable encounter-report builder with synthetic DOM data so
+// table alignment and medication labels are checked without opening print UI.
+const reportScript = inlineScripts.find(script => script.includes('function report(){'));
+assert.ok(reportScript, 'printable encounter report builder exists');
+const reportStart = reportScript.indexOf('function report(){');
+const reportEnd = reportScript.indexOf('\n  }\n  const addExtraReportFields', reportStart) + 4;
+assert.ok(reportEnd > reportStart, 'report function can be isolated for execution');
+const reportValues = new Map([
+  ['presentationTitle', 'Synthetic presentation'], ['patientName', 'Synthetic label'], ['age', 'TEST'],
+  ['admissionDate', ''], ['diagnosis', 'Synthetic diagnosis'], ['complaint', 'Synthetic complaint'],
+  ['arrivalMode', 'Synthetic arrival'], ['preceptor', 'Synthetic preceptor'], ['preceptorTitle', 'Synthetic title'],
+  ['hpi', 'Synthetic H&P'], ['packet.admission.contributingEvents', 'Synthetic admission event'],
+  ['history', 'Synthetic history'], ['allergies', 'Synthetic allergy note'], ['ros', 'Synthetic ROS'],
+  ['physicalExam', 'Synthetic exam'], ['prehospitalEvents', 'Synthetic prehospital note'],
+  ['patientSummary', 'Synthetic summary'], ['events', 'Synthetic timeline'], ['humanFactors', 'Synthetic human factor'],
+  ['systemsFactors', 'Synthetic system factor'], ['patientFactors', 'Synthetic patient factor'],
+  ['literature', 'Synthetic literature note'], ['learningPoints', 'Synthetic learning note'],
+  ['packet.emce.edImproved', 'Synthetic ED note'], ['packet.emce.edHindered', 'Synthetic ED hindrance'],
+  ['packet.emce.icuImproved', 'Synthetic ICU note'], ['packet.emce.icuHindered', 'Synthetic ICU hindrance'],
+  ['packet.criticalCare.discussedWithMedicalStaff', 'Synthetic staff discussion'], ['icuCare', 'Synthetic care note'],
+  ['skills', 'Synthetic skills note'],
+]);
+const makeCell = value => ({ querySelector: () => ({ value }), textContent: '' });
+const rowValues = ['Synthetic hospital day', ...Array.from({length:15},(_,i)=>`Synthetic vital ${i+1}`)];
+const makeMedRow = values => ({ querySelectorAll: () => values.map(value => ({value})) });
+const reportOutput = {innerHTML:''};
+const reportContext = vm.createContext({
+  form: {elements:{namedItem:name=>({value:reportValues.get(name)||''})}},
+  vitalsBody: {rows:[{cells:[{textContent:'Synthetic timepoint'},...rowValues.map(makeCell)]}]},
+  columns:['Time','MAP','BP','RR','HR','Intervention','Temp','etCO2','SpO2','GCS','ECG','Ventilator','Pump','Urine output','pH'],
+  labels:['Synthetic timepoint'], medList:{children:[makeMedRow(['class','scheduled-pattern','drug','pump','pump reason','duration','reason'])]},
+  dripList:{children:[makeMedRow(['drip class','PRN-pattern','solution','drip pump','drip pump reason','drip duration','drip reason'])]},
+  document:{getElementById:id=>id==='case-print-report'?reportOutput:null},
+  escapeHtml:value=>String(value),
+  field:name=>(reportValues.get(name)||'').trim()||'—',
+  textField:(label,name)=>`<h3>${label}</h3><p>${reportValues.get(name)||'—'}</p>`,
+});
+vm.runInContext(`${reportScript.slice(reportStart,reportEnd)}\nreport();`, reportContext);
+assert.equal(reportOutput.innerHTML.match(/<thead><tr>(.*?)<\/tr><\/thead>/)?.[1].match(/<th>/g)?.length, 17, 'print vitals header includes timepoint, hospital day, and all fifteen data columns');
+const printedVitalsRow = reportOutput.innerHTML.match(/<tbody><tr><th>Synthetic timepoint<\/th>(.*?)<\/tr><\/tbody>/)?.[1];
+assert.equal(printedVitalsRow?.match(/<td>/g)?.length, 16, 'print vitals row cells align with all sixteen data headers');
+assert.match(printedVitalsRow, /<td>Synthetic hospital day<\/td>/, 'print vitals retains the hospital-day value');
+assert.match(reportOutput.innerHTML, /<b>Pattern \(scheduled \/ PRN\):<\/b> scheduled-pattern/, 'print medication row labels the pattern field correctly');
+assert.match(reportOutput.innerHTML, /<b>Medication:<\/b> drug/, 'print medication row labels the drug field correctly');
+assert.match(reportOutput.innerHTML, /<b>IV drip \/ solution:<\/b> solution/, 'print drip row labels the solution field correctly');
+assert.doesNotMatch(reportOutput.innerHTML, /undefined:/, 'print medication rows do not emit undefined field labels');
+
 console.log('SICU packet form structure regression passed.');
