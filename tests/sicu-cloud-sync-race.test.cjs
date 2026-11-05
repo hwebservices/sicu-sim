@@ -9,7 +9,7 @@ function makeHarness({ initialCloud } = {}) {
   const elements = new Map();
   const storage = new Map();
   let authChanged;
-  const base = { values: { title: 'base' }, medicationCount: 0 };
+  const base = { values: { title: 'base' }, medicationCount: 0, dripCount: 0, monitoringCount: 0, transportScopeCount: 0 };
   let cloud = initialCloud === undefined ? { schemaVersion: 1, record: base, clientUpdatedAt: 1 } : initialCloud;
   let readGate = null;
   let reads = 0;
@@ -45,7 +45,9 @@ function makeHarness({ initialCloud } = {}) {
   title.name = 'title';
   const form = get('case-form');
   form.elements = [title];
-  get('case-med-list').children = [];
+  for (const id of ['case-med-list', 'case-drip-list', 'case-monitor-rows', 'case-transport-scope-rows']) {
+    get(id).children = [];
+  }
 
   const localStorage = {
     getItem: (key) => storage.get(key) ?? null,
@@ -156,12 +158,14 @@ async function run() {
   const cloudButton = app.elements.get('case-cloud-check');
   const uploadButton = app.elements.get('case-cloud-upload');
   const replaceButton = app.elements.get('case-cloud-replace');
-  app.elements.get('case-cloud-fictional').checked = true;
   await app.signIn();
+  app.elements.get('case-cloud-fictional').checked = true;
   await cloudButton.handlers.click();
   assert.equal(app.reads, 1, 'initial check should read the existing cloud baseline');
 
   app.title.value = 'local edit';
+  await cloudButton.handlers.click();
+  assert.equal(uploadButton.disabled, false, 'a refreshed local-ahead record can be uploaded');
   let releaseTransactionRead;
   const transactionRead = new Promise((resolve) => { releaseTransactionRead = resolve; });
   app.setReadGate(transactionRead);
@@ -170,7 +174,7 @@ async function run() {
 
   app.cloud = { schemaVersion: 1, record: { values: { title: 'remote new' }, medicationCount: 0 }, clientUpdatedAt: 2 };
   await cloudButton.handlers.click();
-  assert.equal(app.reads, 1, 'a concurrent cloud check must not run during upload');
+  assert.equal(app.reads, 2, 'a concurrent cloud check must not run during upload');
   releaseTransactionRead();
   await upload;
   assert.equal(app.writes, 0, 'changed remote data must not be overwritten');
@@ -189,8 +193,8 @@ async function run() {
   assert.equal(app.cloud.record.values.title, 'remote new');
 
   const accountApp = makeHarness();
-  accountApp.elements.get('case-cloud-fictional').checked = true;
   await accountApp.signIn();
+  accountApp.elements.get('case-cloud-fictional').checked = true;
   await accountApp.elements.get('case-cloud-check').handlers.click();
   accountApp.title.value = 'local account edit';
   let releaseAccountRead;
@@ -286,6 +290,22 @@ async function run() {
   assert.equal(automaticSaveApp.cloud.record.values.title, 'synthetic edit after opt-in');
   assert.deepEqual(automaticSaveApp.refs.at(-1), ['users', 'owner-uid', 'sicuCasePackets', 'patient-1'], 'automatic sync stays in the owner UID path');
   assert.equal(automaticSaveApp.storage.has('sicuCloudAutoSyncQueueV1:owner-uid:patient-1'), false, 'successful sync clears the durable queue');
+  editSyntheticDraft(automaticSaveApp, 'second synthetic edit after in-sync', enabledConsent.enabledAt + 20);
+  await automaticSaveApp.settle();
+  assert.equal(automaticSaveApp.writes, 2, 'edits after a successful sync must automatically upload while state was in-sync');
+  assert.equal(automaticSaveApp.cloud.record.values.title, 'second synthetic edit after in-sync');
+
+  const postSyncConflictApp = makeHarness({ initialCloud: null });
+  await enableAutomaticSync(postSyncConflictApp);
+  const postSyncConsent = JSON.parse(postSyncConflictApp.storage.get('sicuCloudAutoSyncConsentV1:owner-uid:patient-1'));
+  editSyntheticDraft(postSyncConflictApp, 'first post-sync baseline', postSyncConsent.enabledAt + 10);
+  await postSyncConflictApp.settle();
+  postSyncConflictApp.cloud = { schemaVersion: 1, record: { values: { title: 'other device edit' }, medicationCount: 0 }, clientUpdatedAt: 3 };
+  editSyntheticDraft(postSyncConflictApp, 'new local post-sync edit', postSyncConsent.enabledAt + 20);
+  await postSyncConflictApp.settle();
+  assert.equal(postSyncConflictApp.writes, 1, 'a later edit must not overwrite a cloud change made after the last sync');
+  assert.equal(postSyncConflictApp.cloud.record.values.title, 'other device edit');
+  assert.match(postSyncConflictApp.elements.get('case-cloud-status').textContent, /cloud copy changed/i);
 
   const preOptInApp = makeHarness({ initialCloud: null });
   await preOptInApp.signIn();
@@ -361,7 +381,9 @@ async function run() {
   assert.doesNotMatch(html, /case-cloud-autosync/, 'automatic saving has no separate manual sync switch');
   assert.match(html, /id="case-cloud-fictional"/, 'fictional-data confirmation remains the data-safety gate');
   assert.match(html, /sicu-local-draft-changed/, 'a saved user edit notifies the sync queue');
-  const draftController = html.slice(html.indexOf('window.sicuCaseDraftController='), html.indexOf("slot.addEventListener('change'"));
+  const draftControllerStart = html.indexOf('window.sicuCaseDraftController=');
+  const draftControllerEnd = html.indexOf("slot.addEventListener('change'", draftControllerStart);
+  const draftController = html.slice(draftControllerStart, draftControllerEnd);
   assert.match(draftController, /clearTimeout\(saveTimer\);saveTimer=0;const isEdited=pendingEdited,editedAt=pendingEditAt;pendingEdited=false;pendingEditAt=0;if\(!writeRecordNow\(\{edited:isEdited,editedAt\}\)\)throw new Error\('local-save-failed'\)/);
   assert.match(html, /pendingEditAt=Date\.now\(\)/, 'edit time is captured before the debounce so pre-opt-in edits cannot be uploaded');
   assert.ok(draftController.indexOf('writeRecordNow()') < draftController.indexOf('localStorage.setItem(storageKey(n),JSON.stringify(record))'), 'pending local saves flush before the cloud record replaces them');
