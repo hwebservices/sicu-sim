@@ -98,6 +98,49 @@ const preservedStore = new Map([['sicuCasePacketPatient1', JSON.stringify({value
 vm.runInContext(seedScript, vm.createContext({localStorage:{getItem:key=>preservedStore.get(key)??null,setItem:(key,value)=>preservedStore.set(key,value)}}));
 assert.equal(JSON.parse(preservedStore.get('sicuCasePacketPatient1')).values.diagnosis, 'existing local draft', 'existing Patient 1 draft is never overwritten by seed');
 
+const presentationScript = inlineScripts.find(script => script.includes("const panel=document.getElementById('sicu-presentation-panel')"));
+assert.ok(presentationScript, 'patient presentation controller exists');
+class PresentationElement {
+  constructor(id = '') { this.id=id; this.value=''; this.hidden=false; this.className=''; this.attributes={}; this.handlers={}; this.children=[]; this._text=''; this.classList={add:()=>{},remove:()=>{}}; }
+  addEventListener(type,handler){this.handlers[type]=handler;}
+  setAttribute(name,value){this.attributes[name]=value;}
+  replaceChildren(...children){this.children=children;}
+  append(...children){this.children.push(...children);}
+  focus(){}
+  dispatchEvent(event){this.handlers[event.type]?.(event);}
+  set textContent(value){this._text=String(value);}
+  get textContent(){return this._text+this.children.map(child=>child.textContent).join('');}
+}
+const presentationNodes=new Map();
+for(const id of ['sicu-presentation-panel','sicu-present-toggle','sicu-presentation-close','sicu-room-patient-slot','case-patient-slot','sicu-room-status','sicu-presentation-title','sicu-presentation-summary','sicu-presentation-vitals','sicu-presentation-meds','sicu-presentation-drips','sicu-presentation-procedures','sicu-presentation-ventilator'])presentationNodes.set(id,new PresentationElement(id));
+presentationNodes.get('sicu-room-patient-slot').value='1';presentationNodes.get('case-patient-slot').value='1';
+const presentationRecords=new Map([
+  ['sicuCasePacketPatient1',{values:{presentationTitle:'Patient One Test Record',patientSummary:'Summary one', 'vitals.row0.hospitalDay':'day-label','vitals.row0.0':'time-entry','medications.0.pattern':'Scheduled','medications.0.drug':'medication-entry','packet.course.procedures':'procedure-entry','packet.course.ventilatorTimeline':'ventilator-entry'},medicationCount:1,dripCount:0}],
+  ['sicuCasePacketPatient2',{values:{presentationTitle:'Patient Two Test Record',patientSummary:'Summary two'},medicationCount:0,dripCount:0}],
+]);
+const domReady=[];const windowListeners={};
+const presentationContext=vm.createContext({
+  document:{getElementById:id=>presentationNodes.get(id)||null,createElement:()=>new PresentationElement(),addEventListener:(type,fn)=>{if(type==='DOMContentLoaded')domReady.push(fn);},body:{classList:{add(){},remove(){}}}},
+  window:{addEventListener:(type,fn)=>{windowListeners[type]=fn;}},
+  localStorage:{getItem:key=>presentationRecords.has(key)?JSON.stringify(presentationRecords.get(key)):null},
+  Event:class{constructor(type){this.type=type;}},
+});
+vm.runInContext(presentationScript,presentationContext);
+for(const ready of domReady)ready();
+assert.match(presentationNodes.get('sicu-presentation-summary').textContent,/Summary one/,'presentation starts with Patient 1 data');
+assert.match(presentationNodes.get('sicu-presentation-vitals').textContent,/Hospital day day-label/,'presentation includes hospital-day snapshot structure');
+assert.match(presentationNodes.get('sicu-presentation-meds').textContent,/medication-entry/,'presentation includes medication detail');
+assert.match(presentationNodes.get('sicu-presentation-procedures').textContent,/procedure-entry/,'presentation includes procedures');
+assert.match(presentationNodes.get('sicu-presentation-ventilator').textContent,/ventilator-entry/,'presentation includes ventilator course');
+presentationNodes.get('sicu-room-patient-slot').value='2';presentationNodes.get('sicu-room-patient-slot').dispatchEvent({type:'change'});
+assert.equal(presentationNodes.get('case-patient-slot').value,'2','room switcher changes the form record selection');
+assert.match(presentationNodes.get('sicu-presentation-summary').textContent,/Summary two/,'presentation switches to Patient 2 record');
+presentationNodes.get('sicu-present-toggle').dispatchEvent({type:'click'});
+assert.equal(presentationNodes.get('sicu-presentation-panel').hidden,false,'presentation view opens');
+presentationNodes.get('sicu-presentation-close').dispatchEvent({type:'click'});
+assert.equal(presentationNodes.get('sicu-presentation-panel').hidden,true,'presentation returns to the room');
+
+
 assert.match(html, /#case-cloud-sync #case-cloud-check,#case-cloud-sync #case-cloud-upload,#case-cloud-sync #case-cloud-download,#case-cloud-sync #case-cloud-replace\{display:none!important\}/, 'manual cloud-sync actions are hidden from the product');
 assert.match(html, /<section id="case-cloud-sync"/, 'cloud sign-in and fictional confirmation remain available without a manual sync panel');
 
